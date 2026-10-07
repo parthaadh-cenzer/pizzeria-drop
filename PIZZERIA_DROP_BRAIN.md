@@ -1,6 +1,6 @@
 # Project Identity
 
-Pizzeria Drop is an original stylized vertical tile-survival prototype and asset studio, built with Three.js/Vite for eventual Staige integration. This Brain records explicit procedures and observed outcomes, not private reasoning. Updated October 7, 2026 (instant lock + winner flow pass). See HANDOFF for current paths/status.
+Pizzeria Drop is an original stylized vertical tile-survival prototype and asset studio, built with Three.js/Vite for eventual Staige integration. This Brain records explicit procedures and observed outcomes, not private reasoning. Updated October 7, 2026 (V1: multiplayer rooms, iPhone/WebKit, mobile UX). See HANDOFF for current paths/status.
 
 # Goals
 
@@ -8,7 +8,7 @@ Cute recognizable mascots, intentional worlds, clear shared-tile rules, momentum
 
 # Locked Product Decisions
 
-PROJECT-SPECIFIC: Three square floors; constant tile size; grid side 7/9/11 by population; levels 19.4/11.8/4.2; gravity 22; jump apex 8.25; collapse 3 seconds; instant lock (0 s, 0.25 s grace); two shots per launcher; initial launcher instances equal actor count; launcher auto-equips on touch; hold to aim, a valid target in the reticle locks instantly, release fires only when locked; rockets fly in 3D with homing, are blocked by intact floors and pass through gaps; rocket affects at most a compact 2x2 with zero HP damage; kill-zone elimination followed by 0.75-second body removal; the last living player wins automatically and the match freezes; the winner's entered name is shown with a crown; Play Again fully rebuilds the match. Easy full floors; Medium interior gaps/hammers; Hard adds gaps/bursts. Starting perimeter remains intact. A normal jump passes upward through one-way platforms and reaches one floor, not two.
+PROJECT-SPECIFIC: Host-selected 5–10 square floors (studio/tests 3) hanging from a fixed top with 7.6 m spacing; up to 15 players (humans + optional host-added bots); server-authoritative online rooms with 5-character codes; Quick Play with local bots; constant tile size; grid side 7/9/11 by population; levels 19.4/11.8/4.2; gravity 22; jump apex 8.25; collapse 3 seconds; instant lock (0 s, 0.25 s grace); two shots per launcher; initial launcher instances equal actor count; launcher auto-equips on touch; hold to aim, a valid target in the reticle locks instantly, release fires only when locked; rockets fly in 3D with homing, are blocked by intact floors and pass through gaps; rocket affects at most a compact 2x2 with zero HP damage; kill-zone elimination followed by 0.75-second body removal; the last living player wins automatically and the match freezes; the winner's entered name is shown with a crown; Play Again fully rebuilds the match. Easy full floors; Medium interior gaps/hammers; Hard adds gaps/bursts. Starting perimeter remains intact. A normal jump passes upward through one-way platforms and reaches one floor, not two.
 
 # Art Direction
 
@@ -46,9 +46,7 @@ GENERALIZABLE: `Match` owns pure state; `GameControls` supplies intent; `main.js
 
 # Multiplayer Architecture
 
-NOT IMPLEMENTED: no networking, backend, matchmaking or authoritative winner lifecycle. There is no synchronization improvement to claim from this pass. The reusable architectural preparation is isolation of state and stable IDs.
-
-GENERALIZABLE proposed future workflow (not validated here): PURPOSE: deterministic ownership of shared hazards. WHEN: adding real remote players. INPUTS: transport/Staige contract and Match schema. PROCEDURE: server owns tile activation deadline, launcher owner/ammo, projectile outcome and elimination; clients send timestamped input; reconcile local motion; interpolate remote actors; replicate events with sequence numbers; test duplicate/out-of-order messages and reconnect. OUTPUT: authoritative matches. VALIDATION: two clients agree on deadlines/ownership under latency/loss. FAILURE MODES: client-clock deadlines, duplicate pickups, damage derived from visual effects. PERFORMANCE: batch deltas, bound event retention and update rates. LESSON: cosmetic prediction must not own irreversible shared outcomes.
+IMPLEMENTED (V1). One Node process (`server/index.js`) serves the built client, `/health`, `/metrics` and WebSocket rooms on `/ws`. The server runs the same pure `Match` as the browser, so rules are shared code and never re-implemented. Clients send intents; the server simulates and broadcasts compact snapshots plus sequenced events. The browser uses `NetMatch`, a Match subclass that predicts the local player, interpolates remotes and applies authoritative state. This keeps the renderer and HUD identical for local and online play. See the workflows below for the reusable procedures and their validation.
 
 # Physics Patterns
 
@@ -257,6 +255,162 @@ GENERALIZABLE workflow.
 - PERFORMANCE CONSIDERATIONS: one shared instance, ~3 draw calls, only while visible.
 - GENERALIZABLE LESSON: semantic bone names make accessories portable; keep them out of exported character files.
 
+# Authoritative Multiplayer Rooms
+
+GENERALIZABLE workflow.
+- PURPOSE: fair, cheat-resistant matches whose outcome never depends on a player's browser.
+- WHEN TO USE: any competitive realtime browser game with shared hazards or pickups.
+- INPUTS: a pure deterministic simulation (fixed step), a message protocol, a server runtime (Node + ws).
+- PROCESS: (1) make the simulation pure and importable by both client and server; (2) the server owns membership, config, start, every irreversible outcome (tiles, pickups, ammo, projectiles, eliminations, winner) and bots; (3) clients send intents only (move vector, aim direction, lock candidate, discrete actions with sequence numbers); (4) validate every intent: clamp vectors, check finite numbers, rate-limit, re-check claims geometrically (lock target alive, in range, inside a generous cone of the claimed aim); (5) run fixed substeps on a server loop and broadcast snapshots at a lower rate; (6) gate test-only commands behind an environment flag.
+- OUTPUT: one authoritative match per room, with clients that cannot assert results.
+- VALIDATION: WebSocket integration tests (two clients see identical state; exclusive pickup; implausible fire rejected without spending ammo; winner identical on both); browser tests with real UI on two clients.
+- COMMON FAILURE MODES: trusting client "I hit/picked up/won" messages; duplicating rules in server code that drift from the client; host-browser authority; unbounded message rates; debug hooks left enabled.
+- PERFORMANCE NOTES: 15 players at 120 Hz simulation cost ≈0.2 ms median per 60 Hz tick here; physics and bot work are O(players × nearby tiles).
+
+# Room-Code Lobby Architecture
+
+GENERALIZABLE workflow.
+- PURPOSE: frictionless private matches without accounts.
+- WHEN TO USE: party games shared by voice/chat/links.
+- INPUTS: room registry, unambiguous code alphabet, lobby state schema, join URL format.
+- PROCESS: (1) generate short codes from an alphabet without 0/O/1/I/L, checking for collisions; (2) create = room + host seat; join = code + name, normalised (uppercase, strip); (3) share both the code and a link (`?room=CODE`) and prefill the join screen from the URL; join screens must contain every required field (name + code); (4) broadcast one canonical lobby state (members, host, ready flags, settings, capacity, canStart with reason); (5) explicit errors: not_found, started, full, bad_name, timeout; never an endless spinner (request timeout + cancel); (6) host settings are optimistic on the host but tagged with a revision; ignore server echoes older than the last sent revision; (7) Play Again/Return to Lobby keep the room and settings and reset ready flags.
+- OUTPUT: create/join/ready/start flow that survives latency and misuse.
+- VALIDATION: unknown code shows an error; non-host settings ignored; settings identical on all clients; start blocked until all humans ready; stale echoes do not revert rapid host edits at 100–150 ms latency.
+- COMMON FAILURE MODES: link-joiners landing on a screen without a name field; optimistic UI overwritten by stale echoes (found at 100 ms); global CSS element selectors (header/footer) restyling lobby markup.
+- PERFORMANCE NOTES: lobby broadcasts are event-driven, not per-tick.
+
+# Humans + Optional Bot Slots
+
+GENERALIZABLE workflow.
+- PURPOSE: let a host fill a lobby with bots without ever displacing real players.
+- WHEN TO USE: small-population multiplayer, solo testing, uneven groups.
+- INPUTS: capacity, human list, bot settings (on/off, count, skill).
+- PROCESS: (1) bots are settings, not members: count clamped to capacity − humans; (2) show bots in the player list with a BOT badge, always ready; (3) when a human joins a full lobby, decrement the bot count instead of rejecting; never remove a human for a bot; (4) at start, assign seats humans-first, then bots, and pass bot indices to the simulation; (5) bots use the same physics and rules; skill changes only reaction time, look-ahead, path noise, search radius and reliability.
+- OUTPUT: mixed matches up to capacity with predictable ordering.
+- VALIDATION: 2 humans + 13 bots → third human joins → 3 + 12; skill profiles monotonic; only bot seats are AI-driven.
+- COMMON FAILURE MODES: bots counted as members needing ready; bots given immunity or perfect knowledge; capacity errors shown to humans while bots occupy seats.
+- PERFORMANCE NOTES: bot decisions run at reaction intervals (0.3–0.9 s), not every tick.
+
+# Deterministic Match Configuration
+
+GENERALIZABLE workflow.
+- PURPOSE: every client renders the same arena without sending geometry.
+- WHEN TO USE: procedurally generated arenas in networked games.
+- INPUTS: sanitised settings, seed, ordered player list.
+- PROCESS: (1) one shared sanitiser clamps all settings (floors 5–10, enums, bot count); (2) the server picks the seed and sends a canonical config at start (map, difficulty, floors, lives, bot skill, seed, ordered players with characters); (3) layout generation is a pure function of the config (no Math.random); (4) seeded randomness for anything placed at start; dynamic placements come from the server; (5) resumes send the config again plus a diff of changed tiles.
+- OUTPUT: identical towers on all clients from about 1 KB of config.
+- VALIDATION: two clients report the same floor count, map and player names; seeded matches place launchers identically; resume reproduces the tile state.
+- COMMON FAILURE MODES: clients randomising independently; UI showing a setting the simulation ignores ("fake" floors); constants (LEVELS) captured at module scope instead of per match.
+- PERFORMANCE NOTES: generating 1,210 tiles for 10 floors is negligible; the renderer instances them per floor and variant.
+
+# WebSocket Synchronization
+
+GENERALIZABLE workflow.
+- PURPOSE: low-bandwidth, latency-tolerant state sync.
+- WHEN TO USE: action games with up to ~16 players per room.
+- INPUTS: snapshot rate, input rate, encoding, event log with sequence numbers.
+- PROCESS: (1) 30 Hz inputs with an increasing seq; 20 Hz snapshots; (2) encode players, launchers and rockets as arrays rounded to 2 decimals; (3) append only new events (by sequence number) to each snapshot; clients dedupe by server seq and expose events to the HUD/FX by a local seq (never by timestamp, which arrives late); (4) splice per-client fields (ack, ackAge) into a shared serialized body instead of re-serialising per client; (5) the client derives its URL from the page (wss on https) or an env override; ping every 2 s and treat 6 s of silence as a dead socket.
+- OUTPUT: ≈26 KB/s down per client at 15 players here.
+- VALIDATION: load test (traffic, tick time); latency matrix (0/50/100/150 ms + jitter) with all gameplay checks repeated.
+- COMMON FAILURE MODES: consuming events by "time > last time" (network events carry older server times); hard-coded ws://localhost; per-frame transform spam.
+- PERFORMANCE NOTES: ≈2 KB snapshot for 15 players; JSON is adequate at this scale. Binary encoding is a later optimisation.
+
+# Timestamp-Based Tile Events
+
+GENERALIZABLE workflow.
+- PURPOSE: synchronized collapse visuals without streaming animation.
+- WHEN TO USE: timers on shared world objects.
+- INPUTS: server activation time, fixed collapse duration, client estimate of server time.
+- PROCESS: (1) the server emits tile-activated {tile, time}; (2) clients set activatedAt/expires from the event and animate shake and colour from (serverNow − activatedAt); (3) the server emits tile-destroyed; clients remove the tile; client prediction never activates or destroys tiles; (4) estimate serverNow as local time minus the minimum observed (arrival − snapshot time) offset, relaxed slowly for drift.
+- OUTPUT: identical activation timestamps on all clients; collapse within one latency.
+- VALIDATION: compare activatedAt per tile across two browsers (equal to the millisecond); the first activated tile is gone for both after 3 s.
+- COMMON FAILURE MODES: clients deciding activation from their own landing (desync); sending shake transforms every frame.
+- PERFORMANCE NOTES: two small events per tile lifetime regardless of player count.
+
+# Snapshot Interpolation and Local Prediction
+
+GENERALIZABLE workflow.
+- PURPOSE: smooth remote players and a responsive local player.
+- WHEN TO USE: server-authoritative movement.
+- INPUTS: snapshot buffer, interpolation delay, input history (seq → send time), local position trail.
+- PROCESS: (1) render remotes at serverNow − 100 ms by interpolating between bracketing snapshots, angle-aware for rotation; extrapolate at most 150 ms; (2) predict the local player with the same physics but disable authority hooks (activate, eliminate, equip, resolve); (3) on each snapshot compare the server position with the local trail at (send time of the acked input + ackAge), not with "now"; (4) ignore small errors (deadzone), bleed medium errors over about 100 ms, and on large errors (over 2.5 m: hammer hit, rocket hole) adopt the server state and clear history; (5) start prediction only after an authoritative landing (initial drop, respawn) and render the local player interpolated until then.
+- OUTPUT: no teleports (max 0.08–0.15 m per 25 ms sample at 0–150 ms) and 0 hard corrections in normal play.
+- VALIDATION: sample remote positions every 25 ms in a second browser while the first walks; count local snaps per latency.
+- COMMON FAILURE MODES: comparing against current position (constant drag-back); predicting during the drop-in (vertical error cascades through a floor: observed +13 m); replaying the old delta after a snap.
+- PERFORMANCE NOTES: trail of 360 steps (3 s); history pruned on every ack.
+
+# Reconnect Grace
+
+GENERALIZABLE workflow.
+- PURPOSE: survive refreshes and mobile network hiccups without losing a seat.
+- WHEN TO USE: phones, flaky networks, long lobbies.
+- INPUTS: per-member random token, grace duration (15 s), local storage.
+- PROCESS: (1) issue a token on welcome and store {code, token, time} locally; (2) on socket close keep the seat and start a grace timer; in a match the character stays with neutral input; (3) the client retries resume every 1.5 s within the grace window and auto-resumes on page load if the stored session is recent; (4) on resume, re-attach the socket, broadcast the lobby and resend start + tile diff if a match is running; (5) after grace: remove in the lobby, eliminate in a match; migrate host if needed; (6) a server heartbeat terminates dead sockets so grace starts promptly.
+- OUTPUT: same identity and seat, no duplicate characters.
+- VALIDATION: WebSocket test (close then resume → same id and seat); browser refresh in the lobby → same member id and a human count unchanged.
+- COMMON FAILURE MODES: new member per reconnect (duplicates); room destroyed on host blip; infinite reconnect loop after the room is gone (stop on not_found/started).
+- PERFORMANCE NOTES: one timer per disconnected member.
+
+# iOS Safari Game Compatibility
+
+GENERALIZABLE workflow.
+- PURPOSE: iPhone Safari as a first-class target.
+- WHEN TO USE: any WebGL game shared by link.
+- INPUTS: Playwright WebKit with iPhone descriptors, the production build, a pixel-readback helper.
+- PROCESS: (1) reproduce first: record WebGL2 support, shader errors, fullscreen capability, viewport and scroll sizes, canvas sizes and console errors in portrait and landscape; (2) verify rendering by reading pixels (WebKit screenshots of resized WebGL canvases can be blank); (3) viewport meta with viewport-fit=cover; dvh with vh fallback; fixed, non-scrolling body with overscroll-behavior none; (4) inputs ≥16 px (no focus zoom); buttons with touch-action manipulation; (5) feature-detect Fullscreen; use immersive fixed-viewport mode plus a Home Screen hint on iPhone; hide the control in standalone; (6) PWA manifest plus Apple meta and touch icon; (7) re-measure on visualViewport resize and after orientationchange; (8) make pointer capture best-effort; (9) build target safari15 (WebGL2 baseline).
+- OUTPUT: a boots, renders and plays result on iPhone-class WebKit, with honest limits documented.
+- VALIDATION: WebKit acceptance (boot, pixels, canvas = viewport, aspect, joystick/jump, immersive mode, rotate, no scroll, online join); a physical device pass is still required.
+- COMMON FAILURE MODES: calling requestFullscreen and assuming it worked; claiming immersive mode is native fullscreen; 100vh only; desktop sidebars on phones; uncaught setPointerCapture errors.
+- PERFORMANCE NOTES: automatic Mobile Balanced profile (pixel ratio 1.25, 1024 shadows, no bloom).
+
+# Responsive Mobile Game HUD Design
+
+GENERALIZABLE workflow.
+- PURPOSE: a thumb-first landscape HUD that looks like part of the game.
+- WHEN TO USE: action games on phones.
+- INPUTS: thumb zones, the action set, a state model (armed/aiming/locked/ammo), an icon set.
+- PROCESS: (1) left = movement joystick (about 120–132 px, semi-transparent, fades when idle); (2) right = open camera-drag area plus an arc of round buttons sized by importance (primary 92 px, secondary 74/60 px) with icons and small labels; (3) encode weapon state on the button (grey when unarmed; glow + ×N badge when armed; distinct aiming/locked colours) instead of separate panels; (4) collapse desktop panels into compact top pills (players left, floor, lives) and icon buttons; (5) update DOM only on change; (6) separate phone layouts for menus and lobbies (side rail plus tabbed panel) rather than shrinking desktop.
+- OUTPUT: a HUD with large targets and clear state at 844×390 and 750×342.
+- VALIDATION: screenshots in both landscape sizes; touch tests for joystick, jump and fire; buttons within safe areas.
+- COMMON FAILURE MODES: random rectangles; text-only buttons; FIRE active without a weapon; per-frame innerHTML rebuilds.
+- PERFORMANCE NOTES: CSS-only effects (gradients, shadows); no canvas UI.
+
+# Mobile Safe-Area Handling
+
+GENERALIZABLE workflow.
+- PURPOSE: keep controls clear of the notch, Dynamic Island, rounded corners and home indicator in both landscape orientations.
+- WHEN TO USE: any full-bleed mobile UI.
+- INPUTS: viewport-fit=cover; env(safe-area-inset-*).
+- PROCESS: (1) enable viewport-fit=cover; (2) position every edge-anchored control with max(base, env(safe-area-inset-side) + gap) on its own side (left joystick uses the left inset; right buttons use the right inset; both use the bottom inset); (3) pad full-screen menus with the insets; (4) paint a game-coloured background behind the insets in immersive mode.
+- OUTPUT: controls that adapt automatically when the device rotates left or right.
+- VALIDATION: static check that all four insets are used; device check on notch/Dynamic Island hardware.
+- COMMON FAILURE MODES: only padding the top; fixed pixel offsets; forgetting that landscape insets swap sides.
+- PERFORMANCE NOTES: none (CSS).
+
+# Touch Camera Controls
+
+GENERALIZABLE workflow.
+- PURPOSE: PUBG-style look and aim while moving.
+- WHEN TO USE: third-person touch games with aiming.
+- INPUTS: Pointer Events, independent pointer ids, look sensitivity, aim-assist profile.
+- PROCESS: (1) any touch on the open right region becomes a look pointer (yaw + pitch); (2) the finger holding FIRE can also drag to look, so a single thumb aims and fires; (3) track each pointer id separately (joystick, look, fire); (4) best-effort pointer capture; (5) apply stronger (still local) aim assist for touch than mouse; (6) clear all pointers on blur, visibility change and pointercancel.
+- OUTPUT: simultaneous move + look + aim with vertical aim on floors above and below.
+- VALIDATION: real CDP multi-touch; touch aim up and down to an instant lock and fire; WebKit pointer events move the joystick.
+- COMMON FAILURE MODES: one global drag flag; capture exceptions aborting handlers; test harness touch semantics (CDP touchEnd lists remaining points).
+- PERFORMANCE NOTES: input only updates intent; no DOM work on move.
+
+# Staige-Compatible Deployment Architecture
+
+GENERALIZABLE workflow.
+- PURPOSE: reproducible, host-agnostic deployment of a realtime web game.
+- WHEN TO USE: deploying to a game platform or PaaS.
+- INPUTS: build command, start command, environment variables, health endpoint.
+- PROCESS: (1) a single process serves static files, health and metrics, and WebSockets on one port ($PORT); (2) the client resolves the realtime URL from the page origin (wss on https) or a build-time env var; no hard-coded hosts or machine paths; (3) /health for readiness and /metrics for tick and traffic; (4) SPA fallback so platform paths (/play/…?room=) load the app; (5) optional origin allow-list; message size caps; heartbeat; (6) document env vars, TLS expectations and scaling limits (in-memory rooms require sticky routing by room code); (7) keep test hooks and simulated latency behind env flags that are off by default.
+- OUTPUT: `npm ci && npm run build && npm start` produces a deployable service.
+- VALIDATION: acceptance suites run against the production build served by the same server code; a fresh clone builds from committed files.
+- COMMON FAILURE MODES: dev proxies assumed in production; ws:// on https pages (blocked as mixed content); localhost URLs; G:/ paths in runtime code; multiple instances without sticky routing.
+- PERFORMANCE NOTES: about 104 MB RSS with one 15-player room here; rooms are independent intervals.
+
 # Desktop Controls
 
 WASD/arrows move relative to camera yaw; mouse drag looks (yaw + pitch); Space jump; E dive; hold left mouse (or F) aims; release fires only when locked; `?` opens controls. Clear held states on blur/cancel/visibility change. Prevent browser defaults for Space/arrows/E/F. The input layer reports intents only; the lock timer lives in the simulation.
@@ -329,7 +483,7 @@ GENERALIZABLE workflow: prove rules, exports and interaction separately.
 - WHEN TO USE: any playable visual prototype.
 - INPUTS: locked requirements, pure state API, asset manifest, local server, Chrome/Playwright.
 - STEP-BY-STEP PROCEDURE: (1) translate each rule into assertion; (2) test pure simulation edge cases; (3) validate exported formats and semantic nodes; (4) run browser from real initial countdown; (5) drive desktop keys and CDP multi-touch; (6) use explicit reproducible fixtures for aiming; (7) capture frames and inspect them; (8) repeat against production bundle.
-- OUTPUT: 27 simulation tests, 15-GLB report, three browser acceptance JSON/screenshot sets (regression, rocket and winner flow with real mouse/touch input).
+- OUTPUT: 34 simulation tests, 15 WebSocket server tests, 15-GLB report, browser suites (regression, rocket, winner), a multiplayer latency matrix, WebKit/iPhone acceptance and a 15-player load test.
 - VALIDATION / TEST: no console/page errors; numeric grip/camera/tile assertions; inspect aim framing and world depth. Label fixtures and hardware limits.
 - COMMON FAILURE MODES: old tests hard-code obsolete 125-cell layouts, testing activate directly but missing spawn contact, fake pointer events, claiming physical-phone performance from desktop emulation.
 - PERFORMANCE CONSIDERATIONS: run broad suite after meaningful changes, not endlessly without new risk.
@@ -361,18 +515,25 @@ GENERALIZABLE: PURPOSE: identify real runtime cost. WHEN: maximum population/haz
 14. Instant lock changed the meaning of older assertions: "holding fire never spends ammo within 0.4 s" and "lock resets 100 ms after leaving" both had to become "fired or cancelled exactly once" and "resets after grace". Re-derive assertions from the new rule instead of loosening them blindly.
 15. Winner resolution froze a falling-launcher unit test whose fixture parked every player off-arena; single-player fixtures avoid accidental resolution in unrelated tests.
 16. The first celebration camera was too close (the head hid the crown) and the countdown "DROP!" text persisted into the win screen; both were found only by inspecting screenshots.
+17. The iPhone problem was not WebGL: WebKit rendered identical pixels to Chromium. The real defects were a dead Fullscreen call, a desktop layout on phones, iOS focus zoom from a 14 px input, and missing safe-area/dvh handling. Reproduce before patching.
+18. Playwright-WebKit screenshots of a resized WebGL canvas came back blank on Windows while readPixels showed correct output; verify rendering numerically.
+19. Starting local prediction during the server-driven drop-in caused vertical error cascades (+13 m through a floor). Predict only after an authoritative landing.
+20. Rapid host setting clicks under 100 ms latency were reverted by stale echoes; settings revisions fixed it.
+21. A global CSS rule hiding the studio's header/footer elements also hid the new lobby's header/footer; avoid element selectors in shared stylesheets.
+22. HUD/FX consumed events by timestamp; network events arrive with older timestamps, so consume by sequence number.
+23. Chrome ignores display-mode emulation over CDP; iOS standalone is testable via navigator.standalone in WebKit.
 
 # Anti-Patterns
 
-Do not rebuild a working pipeline unnecessarily. Do not equate 15 local actors with networking. Do not silently claim Staige/mobile certification. Do not implement rocket HP damage when terrain disruption is the rule. Do not reset shared tile deadlines per actor. Do not leave pickups unsupported in midair. Do not expand a 2x2 footprint to find four surviving tiles. Do not let projectiles pass through intact floors. Do not let aim assist choose off-screen targets. Do not fire on release without a completed lock when release also ends a camera drag. Do not decide winners in presentation code. Do not keep hazards running after resolution. Do not reset a match by mutating the old one. Do not implement hammer elimination as a random scripted event. Do not optimize away customization or expressive silhouette without measuring benefit.
+Do not rebuild a working pipeline unnecessarily. Do not equate 15 local actors with networking. Do not silently claim Staige/mobile certification. Do not implement rocket HP damage when terrain disruption is the rule. Do not reset shared tile deadlines per actor. Do not leave pickups unsupported in midair. Do not expand a 2x2 footprint to find four surviving tiles. Do not let projectiles pass through intact floors. Do not let aim assist choose off-screen targets. Do not fire on release without a completed lock when release also ends a camera drag. Do not decide winners in presentation code. Do not let clients assert pickups, hits or wins. Do not hard-code ws://localhost or machine paths. Do not claim iPhone immersive mode is native fullscreen. Do not keep hazards running after resolution. Do not reset a match by mutating the old one. Do not implement hammer elimination as a random scripted event. Do not optimize away customization or expressive silhouette without measuring benefit.
 
 # Reusable Skills
 
-Workflow catalog above: modular mascot/attachment authoring; third-person camera-relative aiming; vertical targeting; homing steering; analytic cross-floor LOS; auto-equip/ammo; mobile aim assist; contextual onboarding; browser-game optimization; last-player-standing resolution; winner-state transition; deterministic match reset; lightweight victory presentation; contextual character attachments; environment composition around locked topology; custom fixed-step platform physics; vertical camera design; conserved equipment lifecycle; multi-pointer mobile input; world-rest-pose retargeting; semantic-preserving GLB optimization; bounded atmospheric VFX; gameplay-oriented lighting; layered acceptance; contextual performance measurement. Each workflow states inputs, procedure, output, verification and limitations. Network authority is explicitly proposed future work, not demonstrated skill execution in this build.
+Workflow catalog above: modular mascot/attachment authoring; third-person camera-relative aiming; vertical targeting; homing steering; analytic cross-floor LOS; auto-equip/ammo; mobile aim assist; contextual onboarding; browser-game optimization; last-player-standing resolution; winner-state transition; deterministic match reset; lightweight victory presentation; contextual character attachments; authoritative rooms; room-code lobbies; human + bot slots; deterministic match config; WebSocket sync; timestamp tile events; interpolation/prediction; reconnect grace; iOS Safari compatibility; mobile HUD design; safe areas; touch camera; Staige-ready deployment; environment composition around locked topology; custom fixed-step platform physics; vertical camera design; conserved equipment lifecycle; multi-pointer mobile input; world-rest-pose retargeting; semantic-preserving GLB optimization; bounded atmospheric VFX; gameplay-oriented lighting; layered acceptance; contextual performance measurement. Each workflow states inputs, procedure, output, verification and limitations. Network authority is explicitly proposed future work, not demonstrated skill execution in this build.
 
 # Tools / Libraries / Techniques Used
 
-Three.js 0.186.x (BufferGeometry, SkinnedMesh, AnimationMixer, SkeletonUtils, InstancedMesh, GLSL ShaderMaterial, GLTFExporter/Loader, FBXLoader); Vite 8.x; glTF-transform 4.x (dedup/weld/resample/prune); Khronos gltf-validator; Node.js test/assert tooling; Playwright 1.63 and Chrome CDP touch dispatch; PowerShell; local Barlow Condensed/DM Sans fonts. package-lock.json pins actual versions. Meshoptimizer/sharp are available dependencies; do not infer every available package performed a transformation. No Blender, remote asset generator or physical fluid solver was used for this correction.
+Three.js 0.186.x (BufferGeometry, SkinnedMesh, AnimationMixer, SkeletonUtils, InstancedMesh, GLSL ShaderMaterial, GLTFExporter/Loader, FBXLoader); Vite 8.x; glTF-transform 4.x (dedup/weld/resample/prune); Khronos gltf-validator; Node.js test/assert tooling; Playwright 1.63 (Chromium + WebKit 26 with iPhone descriptors) and Chrome CDP touch dispatch; ws 8.x WebSocket server/client; sharp (PWA icon generation); PowerShell; local Barlow Condensed/DM Sans fonts. package-lock.json pins actual versions. Meshoptimizer/sharp are available dependencies; do not infer every available package performed a transformation. No Blender, remote asset generator or physical fluid solver was used for this correction.
 
 # Source / Provenance Notes
 

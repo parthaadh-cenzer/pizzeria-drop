@@ -79,7 +79,7 @@ async function startMatch(page, name) {
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   watch(page);
-  await page.goto(base);
+  await page.goto(base + "/?studio=1");
   await page.waitForFunction(() => window.dropStudio?.match);
 
   // A name is required; an empty name blocks the drop.
@@ -240,7 +240,7 @@ try {
   // Mobile: results card fits and PLAY AGAIN works by tap.
   const mobile = await browser.newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
   watch(mobile);
-  await mobile.goto(base);
+  await mobile.goto(base + "/?studio=1");
   await mobile.waitForFunction(() => window.dropStudio?.match);
   await mobile.fill("#player-name", "PARTH");
   await mobile.tap("#play");

@@ -1,10 +1,5 @@
 import { Vector3 } from "three";
-import {
-  layout,
-  LEVELS,
-  TILE_PITCH,
-  TILE_SIZE,
-} from "../assets/runtime/layout.js";
+import { layout, TILE_PITCH, TILE_SIZE } from "../assets/runtime/layout.js";
 
 // One deterministic state owner. Rendering/input never reset a tile's contact time.
 export const RULES = {
@@ -28,8 +23,28 @@ export const RULES = {
   tileTop: 0.15,
   tileBottom: -0.5,
 };
-const slabTop = (level) => LEVELS[level] + RULES.tileTop,
-  slabBottom = (level) => LEVELS[level] + RULES.tileBottom;
+// Bot skill shapes reaction time, hazard look-ahead, precision and search radius only;
+// bots use the same physics, tiles, hammers and lava as humans.
+export const BOT_SKILL = {
+  easy: { reaction: 0.85, lookAhead: 0.75, noise: 0.35, scan: 3.6, jumpChance: 0.7, fresh: false },
+  medium: { reaction: 0.55, lookAhead: 1.3, noise: 0.12, scan: 5, jumpChance: 0.95, fresh: false },
+  hard: { reaction: 0.32, lookAhead: 1.6, noise: 0.04, scan: 6.5, jumpChance: 1, fresh: true },
+};
+export const BOT_NAMES = [
+  "Nova", "Pepper", "Basil", "Oregano", "Mozz", "Calzone", "Pesto",
+  "Olive", "Rigatoni", "Truffle", "Ricotta", "Fennel", "Gnocchi", "Chili", "Burrata",
+];
+// Small deterministic PRNG so a server seed reproduces launcher placement.
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 export class Match {
   constructor({
     world = "volcano",
@@ -38,12 +53,22 @@ export class Match {
     random = Math.random,
     bots = true,
     names = [],
+    floors = 3,
+    botIds = null,
+    botSkill = "medium",
+    lives = 1,
+    seed = null,
+    validateAim = false,
   } = {}) {
-    this.random = random;
+    this.random = seed === null ? random : mulberry32(seed);
     this.bots = bots;
+    this.validateAim = validateAim;
+    this.lives = Math.max(1, Math.min(5, lives | 0));
     this.world = world;
     this.difficulty = difficulty;
-    this.data = layout(world, count, difficulty);
+    this.data = layout(world, count, difficulty, floors);
+    this.levels = this.data.levels;
+    this.killY = this.data.killY;
     this.time = 0;
     this.phase = "preview";
     this.countdown = 3;
@@ -70,6 +95,11 @@ export class Match {
       return {
         id: i,
         name: names[i] || (i === 0 ? "YOU" : `Pizzaiolo ${i + 1}`),
+        bot: botIds ? botIds.includes(i) : i !== 0,
+        skill: BOT_SKILL[botSkill] ? botSkill : "medium",
+        livesLeft: this.lives,
+        respawning: false,
+        respawnAt: 0,
         position: new Vector3(s.x, s.y, s.z),
         velocity: new Vector3(),
         grounded: false,
@@ -111,7 +141,8 @@ export class Match {
     this.launchers.forEach((l) => this.respawnLauncher(l));
   }
   emit(type, data = {}) {
-    this.events.push({ type, time: this.time, ...data });
+    this.eventSeq = (this.eventSeq ?? 0) + 1;
+    this.events.push({ type, time: this.time, seq: this.eventSeq, ...data });
     if (this.events.length > 100) this.events.shift();
   }
   start() {
@@ -144,18 +175,25 @@ export class Match {
       `${level}/${Math.round(x / TILE_PITCH)}/${Math.round(z / TILE_PITCH)}`,
     );
   }
+  slabTop(level) {
+    return this.levels[level] + RULES.tileTop;
+  }
+  slabBottom(level) {
+    return this.levels[level] + RULES.tileBottom;
+  }
   footing(p) {
     if (p.support && !p.support.gone) return p.support;
-    for (let i = 0; i < LEVELS.length; i++) {
-      if (LEVELS[i] + 0.16 > p.position.y + 0.25) continue;
+    for (let i = 0; i < this.levels.length; i++) {
+      if (this.levels[i] + 0.16 > p.position.y + 0.25) continue;
       const t = this.tileAt(i, p.position.x, p.position.z);
       if (t && !t.gone) return t;
     }
     return null;
   }
   levelAt(y) {
-    for (let i = 0; i < LEVELS.length; i++) if (y >= LEVELS[i] - 0.45) return i;
-    return LEVELS.length - 1;
+    for (let i = 0; i < this.levels.length; i++)
+      if (y >= this.levels[i] - 0.45) return i;
+    return this.levels.length - 1;
   }
   input(id, input) {
     const p = this.players[id];
@@ -209,6 +247,12 @@ export class Match {
       lock.lost = 0;
       return;
     }
+    if (this.validateAim && !this.plausibleTarget(p, target)) {
+      lock.target = null;
+      lock.seconds = 0;
+      lock.locked = false;
+      return;
+    }
     lock.lost = 0;
     if (lock.target !== candidate) {
       lock.target = candidate;
@@ -220,6 +264,17 @@ export class Match {
       lock.locked = true;
       this.emit("locked", { player: p.id, target: candidate });
     }
+  }
+  plausibleTarget(p, target) {
+    if (target.respawning) return false;
+    const to = target.position.clone().sub(p.position);
+    if (to.length() > 60) return false;
+    const aim = p.input.aim;
+    if (!aim) return true;
+    const dir = new Vector3(aim.x, aim.y, aim.z);
+    if (!(dir.lengthSq() > 0.5)) return false;
+    // Generous cone: third-person parallax plus network latency.
+    return dir.normalize().angleTo(to.add(new Vector3(0, 0.6, 0)).normalize()) < 0.75;
   }
   muzzle(p, direction) {
     const flat = new Vector3(direction?.x ?? 0, 0, direction?.z ?? 0);
@@ -234,10 +289,10 @@ export class Match {
   rocketAim(r, target) {
     const foot = this.footing(target);
     // Rising shot: steer into the underside directly beneath the target's feet.
-    if (foot && r.position.y < slabBottom(foot.level))
+    if (foot && r.position.y < this.slabBottom(foot.level))
       return new Vector3(
         target.position.x,
-        slabBottom(foot.level) + 0.3,
+        this.slabBottom(foot.level) + 0.3,
         target.position.z,
       );
     const feet = target.position.clone().add(new Vector3(0, 0.35, 0));
@@ -368,16 +423,20 @@ export class Match {
       ...meta,
       level,
       tiles: destroyed,
-      position: [x, slabTop(level), z],
+      position: [x, this.slabTop(level), z],
     });
     return destroyed;
   }
   // First intact floor slab crossed by segment a→b (tops when descending, undersides when rising).
   segmentHit(a, b) {
     let best = null;
-    for (let level = 0; level < LEVELS.length; level++) {
+    for (let level = 0; level < this.levels.length; level++) {
       const plane =
-        b.y < a.y ? slabTop(level) : b.y > a.y ? slabBottom(level) : null;
+        b.y < a.y
+          ? this.slabTop(level)
+          : b.y > a.y
+            ? this.slabBottom(level)
+            : null;
       if (plane === null) continue;
       if ((a.y - plane) * (b.y - plane) > 0 || a.y === plane) continue;
       const u = (plane - a.y) / (b.y - a.y);
@@ -441,7 +500,7 @@ export class Match {
     }
     const bound = (this.data.half + 0.5) * TILE_PITCH + 9;
     if (
-      r.position.y < RULES.killY ||
+      r.position.y < this.killY ||
       Math.abs(r.position.x) > bound ||
       Math.abs(r.position.z) > bound
     ) {
@@ -453,7 +512,8 @@ export class Match {
     }
   }
   eliminate(p) {
-    if (!p.alive) return;
+    if (!p.alive || p.respawning) return;
+    if (p.livesLeft > 1) return this.loseLife(p);
     p.alive = false;
     p.eliminatedAt = this.time;
     p.grounded = false;
@@ -465,8 +525,40 @@ export class Match {
       p.launcher = null;
       p.ammo = 0;
     }
+    p.livesLeft = 0;
     this.eliminations.push(p.id);
     this.emit("eliminated", { player: p.id });
+  }
+  loseLife(p) {
+    p.livesLeft--;
+    p.respawning = true;
+    p.respawnAt = this.time + 1.6;
+    p.grounded = false;
+    p.support = null;
+    p.velocity.set(0, 0, 0);
+    this.cancelFire(p.id);
+    if (p.launcher !== null) {
+      this.respawnLauncher(this.launchers[p.launcher]);
+      p.launcher = null;
+      p.ammo = 0;
+    }
+    this.emit("life-lost", { player: p.id, livesLeft: p.livesLeft });
+  }
+  respawn(p) {
+    // Highest floor with intact, safe tiles; drop in from above like the opening.
+    for (let level = 0; level < this.levels.length; level++) {
+      const safe = this.tiles.filter(
+        (t) => t.level === level && !t.gone && !t.hammer && t.expires > this.time + 2,
+      );
+      if (!safe.length) continue;
+      const t = safe[Math.floor(this.random() * safe.length)];
+      p.position.set(t.x, t.y + 4, t.z);
+      break;
+    }
+    p.velocity.set(0, 0, 0);
+    p.respawning = false;
+    p.hitUntil = 0;
+    this.emit("respawned", { player: p.id });
   }
   // Last player standing: freeze the match, protect the winner, publish a result.
   resolve() {
@@ -525,6 +617,10 @@ export class Match {
       p.removed = this.time - p.eliminatedAt >= 0.75;
       return;
     }
+    if (p.respawning) {
+      if (this.time >= p.respawnAt) this.respawn(p);
+      else return;
+    }
     const wasGrounded = p.grounded,
       oldY = p.position.y;
     const desired = new Vector3(p.input.x, 0, p.input.z);
@@ -541,8 +637,8 @@ export class Match {
     p.support = null;
     // One-way square platform contacts permit jumping back through a floor from below.
     if (p.velocity.y <= 0)
-      for (let level = 0; level < LEVELS.length; level++) {
-        const top = LEVELS[level] + 0.15;
+      for (let level = 0; level < this.levels.length; level++) {
+        const top = this.levels[level] + 0.15;
         if (oldY < top - 0.025 || p.position.y > top) continue;
         const t = this.tileAt(level, p.position.x, p.position.z);
         if (
@@ -579,7 +675,7 @@ export class Match {
             ? "run"
             : "idle";
     else p.animation = p.velocity.y > 0 ? "jump" : "fall";
-    if (p.position.y <= RULES.killY) this.eliminate(p);
+    if (p.position.y <= this.killY) this.eliminate(p);
   }
   hammerStep(h, dt) {
     const old = h.angle;
@@ -632,19 +728,26 @@ export class Match {
     }
   }
   botStep(p) {
-    if (!this.bots || !p.alive) return;
+    if (!this.bots || !p.alive || p.respawning) return;
+    const skill = BOT_SKILL[p.skill] ?? BOT_SKILL.medium;
     if (this.time >= p.botAt) {
       const nearby = this.tiles.filter(
         (t) =>
           !t.gone &&
           t.level === p.level &&
-          Math.abs(t.x - p.position.x) < 5 &&
-          Math.abs(t.z - p.position.z) < 5 &&
-          t.expires > this.time + 1,
+          Math.abs(t.x - p.position.x) < skill.scan &&
+          Math.abs(t.z - p.position.z) < skill.scan &&
+          t.expires > this.time + skill.lookAhead,
       );
-      const t = nearby[Math.floor(this.random() * nearby.length)];
-      p.botTarget = t;
-      p.botAt = this.time + 0.55;
+      // Skilled bots prefer untouched tiles and avoid standing on hammer pivots.
+      const fresh = skill.fresh
+        ? nearby.filter((t) => t.activatedAt === null && !t.hammer)
+        : [];
+      const pool = fresh.length ? fresh : nearby;
+      p.botTarget = pool[Math.floor(this.random() * pool.length)];
+      p.botJumps = this.random() < skill.jumpChance;
+      p.botNoise = (this.random() - 0.5) * 2 * skill.noise;
+      p.botAt = this.time + skill.reaction * (0.8 + this.random() * 0.4);
     }
     if (p.botTarget) {
       const d = new Vector3(
@@ -652,11 +755,12 @@ export class Match {
         0,
         p.botTarget.z - p.position.z,
       );
-      if (d.length() > 0.3) d.normalize();
+      if (d.length() > 0.3) d.normalize().applyAxisAngle(new Vector3(0, 1, 0), p.botNoise || 0);
       else d.set(0, 0, 0);
       p.input = { x: d.x, z: d.z };
     }
-    if (p.grounded && p.support?.expires < this.time + 1.3) this.jump(p.id);
+    if (p.grounded && p.botJumps && p.support?.expires < this.time + skill.lookAhead)
+      this.jump(p.id);
   }
   step(dt, input = {}) {
     this.time += dt;
@@ -679,8 +783,8 @@ export class Match {
     for (const t of this.tiles)
       if (!t.gone && this.time >= t.expires) this.destroy(t);
     for (const p of this.players) {
-      if (p.id === 0) this.input(0, input);
-      else this.botStep(p);
+      if (p.bot) this.botStep(p);
+      else if (p.id === 0 && input) this.input(0, input);
       this.movePlayer(p, dt);
       this.updateLock(p, p.input.target, dt);
     }
@@ -700,7 +804,7 @@ export class Match {
         const y = l.position.y;
         l.vy -= RULES.gravity * dt;
         l.position.y += l.vy * dt;
-        for (let level = 0; level < LEVELS.length; level++) {
+        for (let level = 0; level < this.levels.length; level++) {
           const t = this.tileAt(level, l.position.x, l.position.z);
           if (t && !t.gone && y >= t.y + 0.15 && l.position.y <= t.y + 0.15) {
             l.position.y = t.y + 0.15;
@@ -710,7 +814,7 @@ export class Match {
             break;
           }
         }
-        if (l.position.y < RULES.killY) {
+        if (l.position.y < this.killY) {
           this.respawnLauncher(l);
           continue;
         }

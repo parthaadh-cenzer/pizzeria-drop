@@ -16,6 +16,7 @@ body.playing header {
 body.playing main {
   inset: 0;
   height: 100svh;
+  height: 100dvh;
   min-height: 0;
 }
 body.playing #match-hud {
@@ -329,6 +330,7 @@ button {
 @media (max-width: 700px) {
   body:not(.playing) {
     height: 100svh;
+  height: 100dvh;
     display: flex;
     flex-direction: column;
   }

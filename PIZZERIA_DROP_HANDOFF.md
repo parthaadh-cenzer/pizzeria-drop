@@ -1,130 +1,184 @@
 # Pizzeria Drop — handoff
 
-Updated October 7, 2026 (instant lock + winner flow pass). Project root: `G:/pizseria drop`. Local Three.js/Vite game and asset studio. Public repo: https://github.com/parthaadh-cenzer/pizzeria-drop (branch `main`). **Not deployed to Staige. No multiplayer transport or backend.**
+Updated October 7, 2026 (V1: multiplayer rooms, iPhone/WebKit compatibility, mobile UX). Project root: `G:/pizseria drop`. Public repo: https://github.com/parthaadh-cenzer/pizzeria-drop (branch `main`). **Not deployed to Staige yet.**
 
-## Final control map
+## iPhone root cause (investigated, not guessed)
 
-| Action | Desktop | Mobile (landscape) |
-| --- | --- | --- |
-| Move | WASD / arrows (camera-relative) | Left joystick |
-| Camera / aim | Mouse drag (any button), yaw + pitch | Drag right side of the screen; the thumb holding FIRE can also drag |
-| Jump | SPACE | JUMP button |
-| Dive | E | DIVE button |
-| Aim (instant lock) | Hold left mouse (F also works) | Hold FIRE |
-| Fire | Release left mouse while locked | Release FIRE while locked |
-| Controls help | `?` key or "? Controls" button | "? Controls" button |
+Reproduced with Playwright WebKit 26 using iPhone 13 descriptors (portrait and landscape) against the dev and production builds.
 
-Releasing with no lock does not fire and keeps ammo. The HUD flashes "NOT LOCKED — AIM AT A PLAYER, THEN RELEASE".
+WebGL2 is available, shaders compile, and the renderer produces exactly the same pixels as Chromium (`readPixels` comparison). The engine was not the failure. The iPhone problems were platform and UX defects:
 
-## Instant rocket lock (decision)
+1. **Full screen did nothing.** iPhone Safari has no element Fullscreen API (`requestFullscreen` and `fullscreenEnabled` are undefined), so `requestFullscreen?.()` silently no-op'd.
+2. **Desktop layout on a phone.** The studio sidebar took 260 px of a 750×342 landscape viewport, the game area was about 490 px wide, and the controls were small. Portrait overflowed and scrolled (696 px of content in 664 px).
+3. **Focus zoom.** The name input was 14 px, so iOS zoomed the page on focus and left it zoomed.
+4. **No `viewport-fit=cover` or safe-area handling, and `svh`-only sizing.** There was no `dvh`, and the canvas was not re-measured on `visualViewport` resize or orientation change.
+5. **Fragile pointer capture.** `setPointerCapture` throws when a pointer has already ended, which aborts the input handler. This was found by the WebKit tests and is now best-effort.
+6. **Newer-syntax risk.** The build target was Vite's default (Safari 16.4+); it is now `safari15`/`es2020`.
 
-The 2-second lock was too slow for the pace of the game. `RULES.lockSeconds = 0`, so `Match.updateLock` locks on the first fixed step that a valid candidate is supplied. A valid candidate is a living other player whose chest projects inside the reticle cone (mouse 56 px, touch 76 px), is in front of the camera and is within 55 m. `RULES.lockGrace = 0.25` s keeps an existing lock through brief jitter, then drops it.
+Also noted: Playwright-WebKit screenshots of a resized WebGL canvas can come back blank on Windows even though rendering is correct, so WebKit tests verify rendering by reading pixels.
 
-Feedback on lock:
-- the reticle ring fills and turns green with a pop animation
-- the target's nameplate is outlined
-- the lock beep plays
-- the reticle text reads `LOCKED · <name> · RELEASE TO FIRE` (or `FLOOR IN THE WAY`)
+**Fixes:**
+- **Viewport and PWA:** `viewport-fit=cover`, `dvh` with fallbacks, safe-area insets on every edge, and a fixed, non-scrolling page.
+- **Inputs:** 16–18 px fields to stop focus zoom.
+- **Fullscreen:** platform-aware. The real Fullscreen API is used where it exists, from the direct gesture. On iPhone the button switches on immersive mode plus a one-time "add to Home Screen" hint (GOT IT / SHOW HOW). In Home Screen (standalone) launches the button is hidden.
+- **PWA files:** `manifest.webmanifest` (fullscreen, landscape) with Apple meta tags and icons.
+- **Orientation:** a rotate prompt in portrait.
+- **Performance:** a Mobile Balanced quality profile.
+- **Input:** best-effort pointer capture.
 
-Aim assist: desktop is light (72 px radius, strength 1.0/s); touch is slightly stronger (104 px, 2.2/s). It never picks off-screen or distant players.
+> iPhone Safari uses immersive viewport mode because element fullscreen is unavailable; installed Home Screen mode provides the cleanest app-like experience. Safari's own toolbar cannot be removed programmatically in a normal tab, so immersive mode is not claimed to be native fullscreen.
 
-Targeting visibility: on screen, in range and in front. Floors are faded locally, so a target seen through a translucent floor can be locked, and the HUD warns when an intact floor will block the rocket. This preserves the intentional floor-obstruction mechanic.
+**Still needed:** a physical iPhone (and Android) pass. All iPhone evidence comes from WebKit emulation.
 
-Unchanged: auto-equip, 2 shots, 3D homing with terminal dive, floor line of sight, max 4-tile 2x2 destruction, zero player damage, launcher respawn and fall rules. Rocket details are in the Brain workflows.
+## Final flow
 
-## Winner flow
+Open game → **Home** (name; Host Game / Join Game / Quick Play) → **Lobby** → host Start → countdown 3-2-1-DROP → match → winner celebration → results → **Play Again** / **Return to Lobby** (same room, same settings, ready flags reset; Play Again also marks you ready).
 
-- **Detection (`Match.resolve`, end of every active step):** when at most one player is alive and the match has at least 2 players, phase becomes `won`.
-  - `winner` is the id, or `null` for a draw when the final players are eliminated in the same step.
-  - It also records `wonAt` and builds `result = { winner, winnerName, draw, placements, names, duration }`. Placements are the winner first, then reverse elimination order.
-  - Emits `winner`.
-- **Winner state:** projectiles cleared and holds cancelled. `secureWinner` puts the winner on its footing tile, or the nearest intact tile if airborne, sets them grounded and switches them to `dance`. While `won`, `step()` only updates eliminated-body removal. Tiles, timers, hammers, launchers, movement and lava checks are frozen, so the winner cannot die. `jump/dive/holdFire` are rejected and input is disabled in `main.js`.
-- **Names:** the lobby has a required "YOUR NAME" field (max 14 characters, saved in `localStorage` key `pizzeria-drop-name`). `Match({ names })` uses it for player 0; bots are `Pizzaiolo N`. An empty name blocks the drop and highlights the field.
-- **Presentation (local only, `main.js` `startCelebration`/`updateCelebration`):**
-  - slow motion: visual time ramps from 0.3× to 1× over 0.9 s; the simulation is frozen
-  - `FollowCamera.celebrate` eases into a slow orbit framing the winner's head from the side the camera was already on
-  - the winner turns toward the camera, plays the existing `dance` clip with decaying hops, and the held launcher is hidden
-  - crown pop; 60 + 36 pieces of confetti from a 96-instance pool; 24 orbiting sparkles
-  - gold screen vignette, fanfare (4 WebAudio notes) and a `WINNER / <name>` banner
-  - at 3.2 s, a results card shows 🏆, WINNER, the name, "LAST ONE STANDING", top-5 placements, PLAY AGAIN and RETURN TO LOBBY
-  - a draw shows "DRAW / NO ONE STANDING" with no crown
-- **Crown (`src/winner-fx.js`):** procedural, baked into 3 vertex-colored meshes: gold band, five tipped points, red/blue jewels. One instance is created at startup and re-parented to the winner's `Head` bone, so it follows animation. It is never part of the character GLB. `reset()` detaches and hides it.
-- **Rematch/reset:** PLAY AGAIN calls `requestRematch()`, which in local mode runs `begin()`. That rebuilds the world through `setupWorld()`: new `Match`, new actors, tiles, launchers and hammers, rocket FX reset, `endCelebration()` (crown detached, VFX cleared, overlays hidden, `match-won` class removed), HUD reset and `follow.reset()`. RETURN TO LOBBY calls `returnToLobby()` → `setupWorld()` without playing. `onMatchResult()` stores `window.dropStudio.lastResult` and dispatches `pizzeria:match-result`. These are the seams for a networked rematch/lobby.
+- **Join:** name plus room code; a `?room=CODE` link prefills the code. Clear errors for not found, already started, room full, server unreachable (8 s timeout) and connection lost. There is never an infinite "connecting" state.
+- **Lobby (host controls):**
+  - map: Volcano / Cityscape
+  - difficulty: Easy / Medium / Hard
+  - floors: 5–10 stepper, default 7, labelled "FLOORS: 7"
+  - lives: Off / On (3 lives)
+  - bots: Off / On
+  - bot count: 0 to remaining capacity
+  - bot skill: Easy / Medium / Hard
 
-## Validation evidence (this pass, dev 5173 and production preview 5174)
+  Everyone sees the player list with HOST, BOT, READY / NOT READY and RECONNECTING badges, and can pick a character. Bots are always ready. Start is enabled only when every non-host human is ready and the total is at least 2.
+- **Quick Play:** local Match against bots with sensible defaults (Easy, 5 floors, 5 medium bots) and no server. Its Return to Lobby opens a local lobby with the same settings UI.
+- **Studio:** `?studio=1` keeps the original sidebar studio and the legacy regression flows.
 
-- `npm test`: **27 gameplay tests** + 15-GLB validation.
-  - New this pass: instant lock/grace/self/dead rejection; release without lock keeps ammo; named last-player-standing with placements; bot winner; winner immune and hazards frozen; airborne winner secured on a tile; draw; clean new Match.
-- `npm run test:browser` runs three scripts. All pass with zero console errors on dev and production:
-  - **`acceptance-browser.mjs`** (prior regression): countdown/first-contact timer, WASD/Space/E, camera descent, auto-equip, lock grace reset, F hold/release 4 tiles, 8-clip grip IK, 15-actor City/Volcano, real CDP multi-touch, Jump/Dive, body removal.
-  - **`acceptance-rocket.mjs`** (8 checks, real mouse and CDP touch): asserts the lock is already set in the same sample that acquires the target (lock time under 0.25 s) for same floor, above, below, and touch up/down. Also covers blocked floor, gap shot, ammo 2→1→0, onboarding text with no 2-second wording, and the hint "Aim at a player to lock".
-  - **`acceptance-winner.mjs`** (12 checks, real clicks/taps):
-    - an empty name blocks the drop
-    - TEST 1 auto-winner; TEST 2 "PARTH" shown; TEST 3 crown on the winner's `Head` bone above the head; TEST 4 dance + celebration
-    - TEST 5 winner survives being moved into lava and tile timers stay frozen
-    - results card content and the published result event
-    - TEST 6 PLAY AGAIN gives a clean state: phase, winner, all alive, tiles, launchers, ammo, name, crown, VFX, overlays, camera, floor tracker
-    - bot winner gets the crown on the correct character
-    - TEST 7 RETURN TO LOBBY; TEST 8 no 2-second wording
-    - mobile 844×390 results buttons on screen and PLAY AGAIN by tap
-  - Screenshots: `winner-celebration.png`, `winner-results.png`, `winner-results-mobile.png`, `rocket-*`. Reports: `*-browser-validation.json`.
-- Performance (local Chrome, 15 actors): City about 5.5 ms median, 162 draw calls; Volcano about 5.6 ms, 146 calls. Winner VFX add 2 instanced draws and 3 crown meshes only during a celebration.
-- `npm run build` succeeds (≈734 kB JS, 190 kB gzip).
+## Multiplayer architecture
+
+- **One deployable Node process** (`server/index.js`) serves `dist/`, `GET /health`, `GET /metrics` and WebSocket rooms on `/ws`. Rooms live in memory, with 5-character codes from an unambiguous alphabet.
+- **Authority:** the server runs the same pure `Match` (`src/gameplay.js`) at 120 Hz fixed steps on a 60 Hz loop and broadcasts 20 Hz snapshots. It owns membership, host, settings, ready state, start, tile activation and destruction, player state, pickups and ammo, rocket validation and impact, bots, lives and the winner.
+- **Client intents:** clients send `input` at 30 Hz (move vector, lock candidate, aim direction, facing), plus `jump` (buffered 150 ms on the server), `dive`, `hold`, `fire` and `cancel`.
+- **Lock and fire validation:** `Match.plausibleTarget` requires the target to be alive, within 60 m and within 0.75 rad of the claimed aim. Ammo, ownership and impacts are decided on the server.
+- **Canonical config:** at start the server sends the config (map, difficulty, floors, lives, bot skill, seed, ordered players). Clients build the same layout; the seed reproduces launcher placement.
+- **Tiles:** `tile-activated` events carry the server timestamp; clients animate shake from it locally and apply `tile-destroyed` events. Nothing per-frame is sent for tiles.
+- **Snapshots:** compact array rows rounded to 2 decimals, about 2 KB for 15 players, plus incremental events with sequence numbers. Each client's snapshot includes `ack`/`ackAge` for reconciliation.
+- **Client mirror (`NetMatch`, a Match subclass):**
+  - The local seat is swapped to index 0, so the renderer and HUD are unchanged.
+  - **Prediction and reconciliation:** the local player is predicted with the same physics once the server confirms a landing. The client compares against its own position at the acked input's send time plus `ackAge`, smooths small errors (deadzone 0.12 m) and adopts the server state for errors over 2.5 m.
+  - **Remotes:** interpolated 100 ms behind, with up to 150 ms extrapolation.
+  - **Lock:** instant locally for feedback.
+- **Reconnect:** a 15 s grace window. A token is stored in localStorage, so a refresh auto-resumes the same seat and identity and a mid-match refresh rebuilds the world from the start message plus a tile diff. In a match, the character stays and stands still during grace; after grace it is eliminated. A heartbeat closes dead sockets.
+- **Host leaves:** permanently leaving the lobby migrates host to the next human. During a match the simulation never depends on any browser. A room with no humans left closes.
+- **Humans before bots:** a human joining at capacity removes one host-added bot. A human is never replaced by a bot.
+- **Settings races:** host edits carry a revision number and the client ignores stale echoes (this fixed a real race found at 100–150 ms latency).
+- **Safety:** an 8 KB message cap, a 90 msg/s input flood guard, name sanitising, an optional origin allow-list, and test hooks only with `ALLOW_TEST_HOOKS=1`.
+
+## Floors, lives, bots
+
+- **Floors:** `layout(..., floors)` generates exactly 1–10 levels from a fixed top (19.4 m) with 7.6 m spacing, so the one-floor jump rule is unchanged. The kill plane is the bottom level minus 4.7 m. Lobby floors are 5–10; studio and old tests keep 3. Deeper towers move Volcano lava and City's `deep_city` section down and add a merged shaft extension (`src/arena-depth.js`) whose camera-facing half fades in the overview.
+- **Lives:** genuinely implemented (no longer "not implemented"). With lives ON (3), a kill-zone contact costs a life; the player is hidden for 1.6 s, then drops onto a safe tile on the highest intact floor. The launcher is dropped and respawns. The final life eliminates. A ♥ pill shows the remaining lives.
+- **Bots:** the same physics and rules as humans. Skill changes only reaction time (0.85 / 0.55 / 0.32 s), hazard look-ahead, path noise, search radius, jump reliability and a preference for untouched tiles. Bots do not use rockets: they pick up launchers by walking over them but never fire.
+
+## Mobile UX (design pass)
+
+- **Menus:** dedicated phone landscape layouts. Home has the brand on the left and the card on the right. The lobby has a left rail (room code, COPY/SHARE, tabs MATCH / PLAYERS / CHARACTER, large READY/START) and a scrollable panel on the right. Targets are at least 44 px and inputs 18 px.
+- **Match HUD (phones):**
+  - top-left pills (players left, FLOOR n/N, lives) and icon buttons (Controls, Full screen, Exit)
+  - a semi-transparent 132 px joystick that fades when idle
+  - a right-thumb cluster: JUMP 74 px, DIVE 60 px, FIRE 92 px, with icons and pressed states
+  - FIRE is grey when unarmed and glows orange with a `×2`/`×1` badge when armed; aiming and locked states have their own styles
+  - the weapon panel and floor list are hidden; desktop keeps them
+- **Mobile Balanced profile** (automatic on coarse-pointer devices of 1024 px or less): pixel ratio capped at 1.25, 1024 px shadow map, bloom off with exposure 1.22. Characters, tiles and lava shaders are unchanged; the volcano lava stays bright.
+
+## Validation evidence (all local; production build unless noted)
+
+- `npm test`: **34 gameplay** tests, **15 server WebSocket** tests and 15-GLB validation. The gameplay tests add floors 5–10, deep-floor jump and lava, lives, human/bot slots, bot skill, seeded launchers and aim validation. The server tests cover:
+  - room code; not_found / started errors
+  - identical settings and floor clamping
+  - capacity with bot replacement
+  - ready gate; canonical config; tile event sync
+  - server movement; exclusive pickup; fire validation
+  - reconnect; winner sync; return to lobby; host migration; health
+- `npm run test:browser` (dev server): legacy desktop/touch regression, 8 rocket checks and 12 winner checks, all with zero errors. Desktop gameplay is not regressed.
+- `npm run test:multiplayer`: **30 checks**, a full scenario at 0 ms plus repeats at 50±15, 100±30 and 150±40 ms. Host desktop and guest touch phone use real browsers and real UI.
+  - Lobby: identical settings and player list.
+  - Match setup: ready → start → same 5-floor Cityscape match.
+  - Movement: visible remotely with no teleports (max 0.08–0.15 m per 25 ms sample) and 0 local hard corrections at every latency.
+  - Tiles: identical activation timestamps, collapsing for both clients.
+  - Pickups and winner: exclusive pickup; winner synced; return to lobby keeps the room and settings.
+  - Recovery: refresh resumes the same identity; an unknown room shows an error.
+- `npm run test:webkit`: **10 checks** on iPhone 13 WebKit:
+  - boot, viewport-fit, manifest and icons, Mobile profile
+  - no page scroll; inputs of 16 px or more
+  - Quick Play rendering verified by pixels; canvas fills the viewport without stretch; joystick and JUMP work
+  - FIRE ×2 armed state
+  - Full screen → immersive mode and hint
+  - portrait rotate prompt and resize on rotation
+  - safe areas
+  - WebKit joining an online room
+  - desktop real Fullscreen API
+  - standalone hides the button
+- `npm run test:load` (15 players: 1 Chrome + 5 headless humans + 9 hard bots, Cityscape Hard, 10 floors, 20 s):
+  - server tick 0.21 ms median / 0.69 ms p95 / 2.4 ms max against a 16.7 ms budget
+  - about 26 KB/s down per client; about 2 KB snapshots at 20 Hz
+  - server RSS about 104 MB
+  - browser 5.6 ms median / 6.9 ms p95 frame, 70 draw calls, 1.07 M triangles, 32 MB JS heap
+  - 0 reconciliation corrections
+- Reports: `assets/reports/multiplayer-validation.json`, `webkit-validation.json`, `load-test.json`, plus `v1-*.png` screenshots (menu, lobby desktop/phone, play phone, results, deep towers).
 
 ## Files changed this pass
 
-`src/gameplay.js` (instant lock + grace, names, `resolve`/`secureWinner`, won phase, eliminations, result) · `src/main.js` (name field, celebration, slow motion, results/rematch/lobby seams, aim-assist tuning) · `src/winner-fx.js` (new) · `src/follow-camera.js` (`celebrate`, shared `constrain`) · `src/hud.js`, `src/game.css` (lock text/feedback, victory banner, results card, fanfare, name field) · `index.html` (YOUR NAME field) · `scripts/test-gameplay.mjs` (+6 net tests) · `scripts/acceptance-winner.mjs` (new) · `scripts/acceptance-rocket.mjs`, `scripts/acceptance-browser.mjs` (instant lock, name seeding) · `package.json` (`test:browser` includes winner, `test:winner`) · README, this handoff, Brain.
+- **New:** `server/index.js`, `server/room.js`, `src/net/protocol.js`, `src/net/connection.js`, `src/net/net-match.js`, `src/ui/menu.js`, `src/ui/menu.css`, `src/ui/icons.js`, `src/hud-v1.css`, `src/arena-depth.js`, `public/manifest.webmanifest`, `public/icons/*`, `scripts/test-server.mjs`, `scripts/acceptance-multiplayer.mjs`, `scripts/acceptance-webkit.mjs`, `scripts/load-test.mjs`, `scripts/make-icons.mjs`.
+- **Modified:**
+  - `src/gameplay.js`: floors, bot slots/skill, lives, seed, aim validation, event sequence numbers.
+  - `assets/runtime/layout.js`: `levelsFor`, `killYFor`.
+  - `src/main.js`: studio mode, quality profile, local/net/preview matches, depth adaptation, game API, routed result buttons, iOS resize.
+  - `src/hud.js`: new HUD markup, fullscreen/immersive, pills, FIRE states, change-only DOM writes, seq-based events.
+  - `src/controls.js`: best-effort capture, joystick active state.
+  - `src/follow-camera.js`: per-match levels.
+  - `src/rocket-fx.js`: seq-based events.
+  - `index.html`: viewport-fit, PWA/Apple meta.
+  - `vite.config.js`: dev proxy, Safari 15 target.
+  - `package.json`: `ws`, scripts, engines.
+  - Legacy acceptance scripts: `?studio=1`.
+  - README, this handoff, Brain.
 
 ## Known bugs / limitations
 
-- Lock acquisition is screen-space and does not require line of sight (intentional; HUD warns). A target jumping over a gap during the terminal dive can make the rocket continue to the floor below.
-- The celebration uses the existing `dance` clip plus procedural hops. There is no dedicated victory clip.
-- The draw case has no special camera beyond the normal follow.
-- Bots never use rockets; there is no player–player collision; camera collision is analytic.
-- Mobile was validated with Chrome touch emulation only. Physical iOS/Android, thermals and long sessions are unverified.
+- **Hardware:** no physical iPhone or Android validation yet (WebKit emulation only); real-device thermals and battery are unknown.
+- **Single process:** rooms are in memory in one process. Horizontal scaling needs sticky routing by room code, or a shared room registry.
+- **Reconnect:** a resume after the 15 s grace window cannot rejoin a running match; it shows an error and returns to Home.
+- **Bots:** they never fire rockets.
+- **Camera:** collision remains analytic.
+- **Draw rule:** the last players falling in the same server tick is a draw.
+- **Remote lock indicators:** remote players' lock rings are not shown; only the local player's lock is visible.
 
-## Deployment / repository status
+## Staige deployment requirements
 
-- GitHub: public repo `parthaadh-cenzer/pizzeria-drop`, branch `main`.
-- Excluded from git: `node_modules`, `dist`, zips, Mixamo source FBX folders (`assets/Girl 1`, `assets/Guy 1`) and textures extracted from them. Committed GLBs are enough to run and build.
-- **Staige:** no SDK, adapter or deployment. **Networking:** none.
+- **Build and run:** `npm ci && npm run build && npm start`. Node 20.19+. One process; listen on `$PORT`. TLS must be terminated by the host so the client connects with `wss://` (derived from the page protocol). If Staige hosts the client and realtime server on different origins, build the client with `VITE_GAME_SERVER_URL=wss://<realtime-host>/ws` and set `ALLOWED_ORIGINS` on the server.
+- **Health and metrics:** `GET /health` returns `{ ok, protocol, uptime, rooms, humans, matches }`; `GET /metrics` returns per-room tick and traffic stats.
+- **WebSocket path:** `/ws`, with an 8 KB max message size and ping every 10 s.
+- **Join links:** `?room=CODE`. Staige can supply its own base URL (`joinUrl(code, base)`) or route `/play/pizzeria-drop?room=CODE` to this app (unknown paths serve `index.html`).
+- **No machine-specific paths:** none at runtime. `G:/` appears only in documentation.
+- **Not done:** the Staige SDK/account contract (identity, matchmaking, analytics) is not integrated. Integrate it at `src/ui/menu.js` (name/identity), `server/room.js` (room lifecycle) and `onMatchResult` in `src/main.js` (results).
 
-## Remaining integration work (in order)
+## Remaining work (in order)
 
-1. Obtain the Staige integration contract; wrap `Match` in an adapter (keep pure tests).
-2. Authoritative server: tile deadlines, launcher ownership/ammo, lock validation, rocket flight/impact, elimination and `resolve()` on the server. Clients receive the `winner` event/result and drive the local celebration. Replace `requestRematch()`/`returnToLobby()` with networked rematch voting and lobby return.
-3. Matchmaking, remote interpolation, reconnect handling.
-4. Physical phone QA and aim-assist tuning on real thumbs; sustained 15-player profiling.
-5. Optional: bot rocket usage, local-player fade while aiming, City art polish (warm haze, red trusses), a dedicated victory clip.
-
-## Continuation map
-
-| Path | Responsibility |
-| --- | --- |
-| `src/gameplay.js` | Fixed-step Match: contacts/timers, movement, hammers, launchers, instant lock, 3D rockets, LOS, elimination, winner resolution/result |
-| `src/main.js` | Renderer, studio/lobby UI, sim→visual, aim acquisition/assist, fading, celebration, rematch/lobby seams, `window.dropStudio` |
-| `src/controls.js` | Keyboard/mouse and independent touch pointers |
-| `src/follow-camera.js` | Follow, aim and celebration cameras |
-| `src/hud.js`, `src/game.css` | HUD, controls panel, hints, names, floor counts, reticle/audio, victory banner, results |
-| `src/rocket-fx.js`, `src/winner-fx.js` | Pooled rocket visuals; crown, confetti, sparkles |
-| `src/weapon-rig.js`, `src/traffic.js` | Hand IK; rim traffic |
-| `assets/runtime/*` | Layout, characters, props, worlds, shaders |
-| `scripts/*` | Asset build, validation, gameplay tests, browser acceptance |
+1. Physical iPhone (Safari tab and Home Screen) and Android Chrome pass; tune joystick size and aim assist on real thumbs; check thermals over 10+ minute sessions.
+2. Staige integration: deploy the single process behind TLS, wire identity and the join URL, add results reporting.
+3. Scale-out plan if needed: sticky routing by room code or a shared registry; add graceful-drain on deploys.
+4. Optional: bots that use rockets, remote lock indicators, local-player fade while aiming, City art polish toward the reference.
 
 ## Commands
 
 ```sh
 npm install
-npm run dev -- --port 5173
-npm test
-npm run test:browser          # needs dev server on 5173 (or PREVIEW_URL)
+npm run dev:server            # realtime server :8787
+npm run dev                   # client :5173 (proxies /ws)
+npm test                      # gameplay + server + GLB validation
+npm run test:browser          # legacy suites (needs dev server)
 npm run build
-npm run preview -- --port 5174
-npm run assets                # only with assets/Girl 1 and assets/Guy 1 restored
+npm run test:multiplayer      # production build, 2 browsers, latency matrix
+npm run test:webkit           # needs: npx playwright install webkit
+npm run test:load
+npm start                     # production single process
 ```
-
-Chrome path for acceptance: `C:/Program Files/Google/Chrome/Application/chrome.exe`.
 
 ## Assets and provenance
 
-Source FBXs (Mixamo) stay local and are not in the public repo. Six motions are retargeted at 24 Hz; landing/hit are authored. Character, crown and prop geometry are procedural and original. Source-asset rights were not independently audited. The reference images in `Reference images/` guide style, not gameplay topology.
+Source FBXs (Mixamo) stay local and are not in the public repo. Character, crown, prop, shaft and icon geometry are procedural and original. Source-asset rights were not independently audited. The reference images guide style only.

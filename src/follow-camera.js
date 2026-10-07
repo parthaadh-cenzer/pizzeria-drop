@@ -114,7 +114,7 @@ export class FollowCamera {
       desired.z *= 18 / r;
     }
     // Never above the underside of the floor overhead nor below the player's own floor.
-    const above = LEVELS.filter((y) => y > p.position.y + 2.6).at(-1);
+    const above = (this.levels ?? LEVELS).filter((y) => y > p.position.y + 2.6).at(-1);
     if (above !== undefined) desired.y = Math.min(desired.y, above - 0.7);
     desired.y = Math.max(desired.y, p.position.y + 0.4);
     return desired;

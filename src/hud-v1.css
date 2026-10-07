@@ -1,0 +1,382 @@
+/* ===== V1: page/viewport baseline (iOS Safari: dvh, safe areas, no rubber-band) ===== */
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+body.playing,
+body:not(.studio) {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0d0f1a;
+}
+body.playing main {
+  height: 100vh;
+  height: 100dvh;
+}
+button {
+  touch-action: manipulation;
+}
+/* iPhone "immersive" mode: fixed full dynamic viewport, game background behind notch areas. */
+body.immersive main {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background: #000;
+  z-index: 1;
+}
+body.standalone #fullscreen {
+  display: none;
+}
+
+/* ===== V1 match HUD ===== */
+#match-banner {
+  left: max(14px, env(safe-area-inset-left));
+  top: max(12px, env(safe-area-inset-top));
+  gap: 8px;
+  padding: 6px;
+  background: #151827cc;
+  border-radius: 14px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#match-banner .pill {
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: #ffffff10;
+  font: 700 13px "Barlow Condensed", sans-serif;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+#match-banner #lives-pill {
+  color: #ff8a8a;
+}
+#match-banner .hud-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: #2b3047;
+  font: 700 11px "DM Sans", sans-serif;
+  color: #fff;
+}
+#match-banner .hud-btn svg {
+  width: 17px;
+  height: 17px;
+}
+#match-banner #controls-open {
+  background: #2b3047;
+}
+#match-banner .hud-btn.on {
+  box-shadow: inset 0 0 0 1px #ffcb75;
+}
+#floor-tracker {
+  right: max(16px, env(safe-area-inset-right));
+}
+#floor-tracker > div {
+  padding: 3px 6px;
+}
+#net-banner {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #3a2a14ee;
+  border: 1px solid #ffcb7566;
+  color: #ffd493;
+  font: 700 12px "DM Sans", sans-serif;
+  letter-spacing: 1px;
+  display: none;
+  z-index: 5;
+}
+body.net-reconnecting #net-banner {
+  display: block;
+}
+
+/* ===== V1 touch controls (landscape phone) ===== */
+#joystick {
+  left: max(26px, calc(env(safe-area-inset-left) + 12px));
+  bottom: max(24px, calc(env(safe-area-inset-bottom) + 10px));
+  width: 132px;
+  height: 132px;
+  border: 2px solid #ffffff38;
+  background:
+    radial-gradient(circle, #ffffff10 0%, #ffffff06 60%, #0000 61%),
+    #10142380;
+  box-shadow: inset 0 0 24px #0006;
+  opacity: 0.55;
+  transition: opacity 0.25s;
+}
+#joystick:active,
+#joystick.active {
+  opacity: 1;
+}
+#joystick i {
+  width: 56px;
+  height: 56px;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #cfd5e6 60%, #9aa3bb);
+  border: 0;
+  box-shadow: 0 4px 12px #0007;
+}
+#joystick i::before,
+#joystick i::after {
+  display: none;
+}
+.touch-actions {
+  right: max(22px, calc(env(safe-area-inset-right) + 10px));
+  bottom: max(20px, calc(env(safe-area-inset-bottom) + 8px));
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    ". dive"
+    "jump fire";
+  align-items: end;
+  justify-items: center;
+  gap: 10px 14px;
+}
+.touch-actions button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  color: #fff;
+  border: 1.5px solid #ffffff40;
+  background: radial-gradient(circle at 50% 30%, #3a4363e6, #1b2135e6);
+  box-shadow:
+    0 6px 16px #0008,
+    inset 0 1px 0 #ffffff26;
+  font: 700 10px "DM Sans", sans-serif;
+  letter-spacing: 1.2px;
+  transition:
+    transform 0.07s,
+    filter 0.15s,
+    opacity 0.2s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.touch-actions button svg {
+  width: 26px;
+  height: 26px;
+}
+.touch-actions button small {
+  font-size: 9px;
+  opacity: 0.8;
+}
+.touch-actions button:active {
+  transform: scale(0.92);
+  filter: brightness(1.25);
+}
+#touch-jump {
+  grid-area: jump;
+  width: 74px;
+  height: 74px;
+}
+#touch-dive {
+  grid-area: dive;
+  width: 60px;
+  height: 60px;
+}
+#touch-dive svg {
+  width: 22px;
+  height: 22px;
+}
+.touch-actions #touch-fire {
+  grid-area: fire;
+  width: 92px;
+  height: 92px;
+  background: radial-gradient(circle at 50% 30%, #3a3f52d9, #20232fd9);
+  border-color: #ffffff2a;
+}
+.touch-actions #touch-fire svg {
+  width: 34px;
+  height: 34px;
+}
+.touch-actions #touch-fire:disabled {
+  opacity: 0.38;
+  filter: grayscale(1);
+}
+.touch-actions #touch-fire.armed {
+  background: radial-gradient(circle at 50% 30%, #ff9d5c, #e4572a);
+  border-color: #ffd0b0;
+  box-shadow:
+    0 0 0 4px #ff7a3d33,
+    0 8px 22px #e4572a88;
+  animation: fire-ready 1.6s ease-in-out infinite;
+}
+.touch-actions #touch-fire.aiming {
+  animation: none;
+  box-shadow: 0 0 0 6px #ffcb7555;
+}
+.touch-actions #touch-fire.locked {
+  background: radial-gradient(circle at 50% 30%, #9cf0b2, #3fb565);
+  box-shadow: 0 0 0 6px #7ee59a55;
+}
+@keyframes fire-ready {
+  50% {
+    box-shadow:
+      0 0 0 9px #ff7a3d22,
+      0 8px 22px #e4572a88;
+  }
+}
+#touch-fire .ammo {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 28px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #fff4e3;
+  color: #c2421b;
+  font: 700 13px "Barlow Condensed", sans-serif;
+  box-shadow: 0 2px 6px #0007;
+}
+#touch-fire .ammo:empty {
+  display: none;
+}
+@media (pointer: coarse), (max-width: 900px) {
+  /* Phones: compact icon-only top bar; the floor list becomes the FLOOR pill. */
+  #match-banner .hud-btn span {
+    display: none;
+  }
+  #match-banner .hud-btn {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    justify-content: center;
+  }
+  #floor-tracker {
+    display: none;
+  }
+  #weapon-status {
+    display: none;
+  }
+  #aim-reticle {
+    width: 104px;
+    height: 104px;
+  }
+}
+@media (max-height: 420px) {
+  #joystick {
+    width: 116px;
+    height: 116px;
+  }
+  #touch-jump {
+    width: 66px;
+    height: 66px;
+  }
+  #touch-dive {
+    width: 54px;
+    height: 54px;
+  }
+  .touch-actions #touch-fire {
+    width: 82px;
+    height: 82px;
+  }
+  .touch-actions {
+    gap: 8px 12px;
+  }
+}
+
+/* ===== Portrait prompt (phones) ===== */
+#rotate-overlay {
+  display: none;
+}
+@media (orientation: portrait) and (pointer: coarse) and (max-width: 900px) {
+  #rotate-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    background: #0d0f1af5;
+    color: #fff7ec;
+    text-align: center;
+  }
+  #rotate-overlay div {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+  }
+  #rotate-overlay svg {
+    width: 64px;
+    height: 64px;
+    color: #ffcb75;
+    animation: rotate-hint 2.4s ease-in-out infinite;
+  }
+  #rotate-overlay b {
+    font: 700 30px "Barlow Condensed", sans-serif;
+    letter-spacing: 3px;
+  }
+  #rotate-overlay span {
+    color: #b8bccd;
+    font-size: 14px;
+  }
+}
+@keyframes rotate-hint {
+  0%,
+  30% {
+    transform: rotate(0);
+  }
+  60%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+/* ===== iPhone Home Screen hint (non-blocking) ===== */
+#ios-hint {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #191d2cf2;
+  border: 1px solid #ffcb7566;
+  color: #fff;
+  font:
+    14px/1.4 "DM Sans",
+    sans-serif;
+  box-shadow: 0 12px 30px #0009;
+}
+#ios-hint[hidden] {
+  display: none;
+}
+#ios-hint p {
+  margin: 0 0 8px;
+}
+#ios-hint ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: #cfd3e0;
+}
+#ios-hint div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+#ios-hint .chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #ffffff30;
+  background: #ffffff12;
+  color: #fff;
+  font: 700 11px "DM Sans", sans-serif;
+  letter-spacing: 1px;
+}
+#ios-hint .chip.primary {
+  background: #ff7a3d;
+  border: 0;
+}

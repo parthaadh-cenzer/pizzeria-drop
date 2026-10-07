@@ -177,7 +177,7 @@ try {
   // H: discoverability on a fresh profile.
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   watch(page);
-  await page.goto(base);
+  await page.goto(base + "/?studio=1");
   await page.waitForFunction(() => window.dropStudio?.match);
   await page.fill("#player-name", "PARTH");
   await page.click("#play");
@@ -286,7 +286,7 @@ try {
     hasTouch: true,
   });
   watch(mobile);
-  await mobile.goto(base);
+  await mobile.goto(base + "/?studio=1");
   await mobile.waitForFunction(() => window.dropStudio?.match);
   await mobile.fill("#player-name", "PARTH");
   await mobile.click("#play");

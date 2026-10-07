@@ -1,4 +1,11 @@
 // Pointer IDs remain independent: movement, look and fire can run simultaneously.
+// Capture is best-effort: it throws if the pointer already ended (seen with iOS touch timing),
+// and an exception must never abort the input handler.
+const capture = (el, id) => {
+  try {
+    el.setPointerCapture(id);
+  } catch {}
+};
 export class GameControls {
   constructor(
     canvas,
@@ -56,7 +63,7 @@ export class GameControls {
     canvas.addEventListener("pointerdown", (e) => {
       if (!enabled()) return;
       this.lastPointerType = e.pointerType === "touch" ? "touch" : "mouse";
-      canvas.setPointerCapture(e.pointerId);
+      capture(canvas, e.pointerId);
       this.lookPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (e.pointerType === "mouse" && e.button === 0 && canAim())
         this.startFire(e.pointerId);
@@ -93,7 +100,8 @@ export class GameControls {
       if (!enabled() || active !== null) return;
       e.preventDefault();
       active = e.pointerId;
-      stick.setPointerCapture(active);
+      capture(stick, active);
+      stick.classList.add("active");
       const rect = stick.getBoundingClientRect();
       origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       move(e);
@@ -102,6 +110,7 @@ export class GameControls {
     const end = (e) => {
       if (e.pointerId === active) {
         active = null;
+        stick.classList.remove("active");
         this.stick = { x: 0, z: 0 };
         knob.style.transform = "";
       }
@@ -125,7 +134,7 @@ export class GameControls {
     fire.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       this.lastPointerType = "touch";
-      fire.setPointerCapture(e.pointerId);
+      capture(fire, e.pointerId);
       fireDrag.set(e.pointerId, { x: e.clientX, y: e.clientY });
       this.startFire(e.pointerId);
     });

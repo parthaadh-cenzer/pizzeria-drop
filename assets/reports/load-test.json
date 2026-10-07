@@ -1,0 +1,34 @@
+{
+  "environment": "Local Windows machine; server in-process (Node); 1 Chrome client + 5 headless WS clients + 9 hard bots; Cityscape Hard 10 floors. Not a physical phone.",
+  "durationSeconds": 20,
+  "server": {
+    "tickMedianMs": 0.19,
+    "tickP95Ms": 0.699,
+    "tickMaxMs": 1.836,
+    "tickBudgetMs": 16.7,
+    "rssMB": 102.1,
+    "rssGrowthMB": -25.5
+  },
+  "network": {
+    "downKBPerClientPerSecond": 26,
+    "snapshotHz": 20,
+    "snapshotBytes": 1823
+  },
+  "browser": {
+    "frames": 3601,
+    "medianFrameMs": 5.6,
+    "p95FrameMs": 7.2,
+    "drawCalls": 66,
+    "triangles": 1051246,
+    "jsHeapMB": 31.5,
+    "players": 15,
+    "alive": 13,
+    "floors": 10,
+    "net": {
+      "snapshots": 349,
+      "corrections": 0,
+      "snaps": 0
+    }
+  },
+  "errors": []
+}

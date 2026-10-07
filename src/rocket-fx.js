@@ -110,14 +110,14 @@ export function createRocketFX(scene) {
       }
       puffs.instanceMatrix.needsUpdate = true;
       for (const e of match?.events ?? [])
-        if (e.time > lastEvent && e.type === "rocket-impact") {
+        if (e.seq > lastEvent && e.type === "rocket-impact") {
           const f = flashes[nextFlash];
           nextFlash = (nextFlash + 1) % FLASHES;
           f.position.fromArray(e.position);
           f.userData.age = 0;
           f.visible = true;
         }
-      if (match) lastEvent = match.time;
+      if (match) lastEvent = match.events.at(-1)?.seq ?? lastEvent;
       for (const f of flashes) {
         if (!f.visible) continue;
         f.userData.age += dt / 0.45;

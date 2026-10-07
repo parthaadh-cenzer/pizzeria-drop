@@ -1,0 +1,90 @@
+{
+  "environment": "Playwright WebKit 26 (iPhone 13 descriptors, landscape/portrait) + Chrome desktop, production build via server/index.js. Not a physical iPhone.",
+  "checks": [
+    "iPhone WebKit boots: viewport-fit=cover, PWA manifest + icons, Mobile Balanced profile",
+    "menu inputs ≥16px (no iOS focus zoom); no page scroll",
+    "Quick Play on iPhone WebKit: scene renders, canvas fills viewport without stretch, joystick + JUMP work, FIRE inactive until equipped",
+    "FIRE becomes prominent when equipped with ×2 ammo badge",
+    "iPhone Full Screen → immersive fixed 100dvh mode, Home Screen hint (GOT IT / SHOW HOW), no scroll, no error",
+    "rotate prompt in portrait, hidden in landscape; renderer/camera resize after rotation",
+    "HUD, joystick, buttons and menu use env(safe-area-inset-*) on all sides",
+    "iPhone WebKit joins a room by link, readies and enters the synchronized match",
+    "desktop Full screen uses the real Fullscreen API",
+    "installed Home Screen (standalone) mode hides the Full screen control and the hint"
+  ],
+  "data": {
+    "iPhone WebKit boots: viewport-fit=cover, PWA manifest + icons, Mobile Balanced profile": {
+      "viewport": "width=device-width, initial-scale=1, viewport-fit=cover",
+      "manifest": "http://127.0.0.1:50742/manifest.webmanifest",
+      "apple": "yes",
+      "touchIcon": "http://127.0.0.1:50742/icons/apple-touch-icon.png",
+      "fullscreenApi": false,
+      "mobileProfile": true,
+      "pixelRatio": 1.25
+    },
+    "menu inputs ≥16px (no iOS focus zoom); no page scroll": {
+      "font": 18,
+      "inner": [
+        750,
+        342
+      ],
+      "scroll": [
+        750,
+        342
+      ],
+      "canvasCss": [
+        750,
+        342
+      ],
+      "aspect": 2.193
+    },
+    "Quick Play on iPhone WebKit: scene renders, canvas fills viewport without stretch, joystick + JUMP work, FIRE inactive until equipped": {
+      "colours": 23,
+      "inner": [
+        750,
+        342
+      ],
+      "scroll": [
+        750,
+        342
+      ],
+      "canvasCss": [
+        750,
+        342
+      ],
+      "aspect": 2.193
+    },
+    "iPhone Full Screen → immersive fixed 100dvh mode, Home Screen hint (GOT IT / SHOW HOW), no scroll, no error": {
+      "immersive": true,
+      "hint": true,
+      "hintText": "For true fullscreen on iPhone, add Pizzeria Drop to your Home Screen.",
+      "label": "Exit full screen",
+      "mainPos": "fixed"
+    },
+    "rotate prompt in portrait, hidden in landscape; renderer/camera resize after rotation": {
+      "portrait": "grid",
+      "landscape": "none",
+      "inner": [
+        750,
+        342
+      ],
+      "scroll": [
+        750,
+        342
+      ],
+      "canvasCss": [
+        750,
+        342
+      ],
+      "aspect": 2.193
+    },
+    "iPhone WebKit joins a room by link, readies and enters the synchronized match": {
+      "code": "Y6AGZ"
+    },
+    "installed Home Screen (standalone) mode hides the Full screen control and the hint": {
+      "cls": true,
+      "btn": "none"
+    }
+  },
+  "errors": []
+}

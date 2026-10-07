@@ -9,7 +9,10 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { lavaMaterial, layout } from "../assets/runtime/worlds.js";
 import { mesh, box, material, rng } from "../assets/runtime/palette.js";
 import { makeEffects } from "../assets/runtime/effects.js";
-import { Match, RULES } from "./gameplay.js";
+import { Match, RULES, BOT_NAMES } from "./gameplay.js";
+import { NetMatch } from "./net/net-match.js";
+import { createMenu } from "./ui/menu.js";
+import { makeShaft } from "./arena-depth.js";
 import { GameControls } from "./controls.js";
 import { FollowCamera, AIM_PITCH } from "./follow-camera.js";
 import { createHUD } from "./hud.js";
@@ -18,8 +21,17 @@ import { createTraffic } from "./traffic.js";
 import { createRocketFX } from "./rocket-fx.js";
 import { createWinnerFX } from "./winner-fx.js";
 import "./game.css";
+import "./hud-v1.css";
 import { bake } from "../assets/runtime/props.js";
 
+// ?studio=1 keeps the original asset studio sidebar (asset inspection + legacy regression tests).
+const STUDIO = new URLSearchParams(location.search).has("studio");
+document.body.classList.toggle("studio", STUDIO);
+// Automatic quality profile: phones/tablets get "Mobile Balanced" (no user configuration).
+const MOBILE =
+  matchMedia("(pointer: coarse)").matches &&
+  Math.min(screen.width, screen.height) <= 1024;
+document.body.classList.toggle("mobile", MOBILE);
 const $ = (s) => document.querySelector(s),
   viewport = $("#viewport"),
   scene = new T.Scene(),
@@ -28,7 +40,7 @@ const renderer = new T.WebGLRenderer({
   antialias: true,
   powerPreference: "high-performance",
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.25 : 1.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = T.PCFSoftShadowMap;
 renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -50,7 +62,7 @@ scene.add(hemi);
 const sun = new T.DirectionalLight(0xffe0ba, 3.2);
 sun.position.set(4, 30, 16);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048);
 Object.assign(sun.shadow.camera, {
   left: -19,
   right: 19,
@@ -169,6 +181,7 @@ function actor(kind, parent, x, y, z) {
   return a;
 }
 function clearWorld() {
+  match?.dispose?.();
   effects?.dispose();
   for (const r of dynamicResources) r.dispose();
   dynamicResources.length = 0;
@@ -188,7 +201,7 @@ function clearWorld() {
 function setupTiles() {
   tiles = match.tiles;
   remaining = tiles.filter((t) => !t.gone).length;
-  for (let level = 0; level < 3; level++)
+  for (let level = 0; level < match.levels.length; level++)
     for (const variant of ["normal", "burst"]) {
       const entries = tiles.filter(
         (t) => t.level === level && t.variant === variant,
@@ -231,8 +244,14 @@ function setupTiles() {
   }
 }
 function setCamera() {
-  camera.position.set(32, world === "volcano" ? 55 : 36, 39);
-  controls.target.set(0, 11, 0);
+  // Frame the whole tower: deeper floor counts pull the overview target down.
+  const mid = (match.levels[0] + match.levels.at(-1)) / 2,
+    depth = match.levels[0] - match.levels.at(-1);
+  // Deeper towers: move inside the outer mountain ring and look down the shaft more steeply.
+  const k = Math.min(1, Math.max(0, (depth - 15.2) / 53.2)),
+    lerp = (a, b) => a + (b - a) * k;
+  camera.position.set(lerp(32, 20), lerp(world === "volcano" ? 55 : 36, world === "volcano" ? 62 : 46), lerp(39, 25));
+  controls.target.set(0, Math.min(11, mid), 0);
   controls.update();
 }
 function spawnActors() {
@@ -243,7 +262,7 @@ function spawnActors() {
   actors = [];
   for (const p of match.players) {
     const a = actor(
-      p.id === 0 ? selected : p.id % 2 ? "boy" : "girl",
+      match.characters?.[p.id] ?? (p.id === 0 ? selected : p.id % 2 ? "boy" : "girl"),
       worldRoot,
       p.position.x,
       p.position.y,
@@ -263,18 +282,41 @@ function spawnActors() {
   }
   player = actors[0];
 }
-function setupWorld() {
+// opts.net: server start message (+ opts.connection) → NetMatch mirror.
+// opts.local: host-style settings for a local bots match. Otherwise: studio/preview match.
+function setupWorld(opts = {}) {
   playing = false;
   paused = false;
   document.body.classList.remove("playing");
   $("#play").innerHTML = "Take the drop <span>↗</span>";
   clearWorld();
-  match = new Match({
-    world,
-    difficulty,
-    count: crowd,
-    names: [playerName() || "YOU"],
-  });
+  if (opts.net) {
+    world = opts.net.config.world;
+    match = new NetMatch(opts.net, opts.connection);
+  } else if (opts.local) {
+    const c = opts.local,
+      bots = c.bots ? c.botCount : 0;
+    world = c.world;
+    match = new Match({
+      world: c.world,
+      difficulty: c.difficulty,
+      count: 1 + bots,
+      floors: c.floors,
+      lives: c.lives ? 3 : 1,
+      botSkill: c.botDifficulty,
+      names: [c.name, ...Array.from({ length: bots }, (_, i) => `Bot ${BOT_NAMES[i % BOT_NAMES.length]}`)],
+    });
+    match.characters = [c.character, ...Array.from({ length: bots }, (_, i) => (i % 2 ? "boy" : "girl"))];
+  } else {
+    match = new Match({
+      world,
+      difficulty,
+      count: crowd,
+      floors: previewFloors,
+      names: [playerName() || "YOU"],
+    });
+  }
+  follow.levels = match.levels;
   accumulator = 0;
   controls.enabled = true;
   camera.fov = 42;
@@ -313,7 +355,7 @@ function setupWorld() {
       new T.BoxGeometry(42, 0.5, 42),
       0x252f49,
       worldRoot,
-      [0, -34, 0],
+      [0, Math.min(-34, match.killY - 3), 0],
       [1, 1, 1],
     );
     floor.receiveShadow = true;
@@ -352,6 +394,7 @@ function setupWorld() {
     }
     traffic = createTraffic(cars);
   }
+  adaptDepth();
   // A single bounded particle draw for embers / city dust.
   const random = rng(99),
     points = [];
@@ -384,6 +427,32 @@ function setupWorld() {
     : "Warm hearts. Unstable ground.";
   toast("Drag to orbit · Scroll to explore");
 }
+// Deeper towers (5–10 floors) extend below the authored shells: lava/kill plane follow the
+// bottom floor, City's deep section moves down, and a cheap merged shaft fills the gap.
+function adaptDepth() {
+  const killY = match.killY,
+    bottom = killY - 3;
+  lava.position.y = killY - 0.7;
+  under.position.y = killY + 3.5;
+  if (world === "cityscape") {
+    const deep = environment.getObjectByName("deep_city");
+    const shift = Math.min(0, bottom - -33);
+    if (deep) deep.position.y += shift;
+    if (shift < 0) addShaft(makeShaft("cityscape", -18, bottom));
+  } else if (bottom < -1) addShaft(makeShaft("volcano", -1, bottom));
+}
+// Shaft lives in the environment so begin() restores the faded overview sides for play.
+function addShaft(shaft) {
+  environment.add(shaft.group);
+  dynamicResources.push(...shaft.resources);
+  shaft.front.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material.transparent = true;
+    o.material.opacity = 0.12;
+    o.material.depthWrite = false;
+    o.userData.previewFade = true;
+  });
+}
 function roster() {
   playing = false;
   document.body.classList.remove("playing");
@@ -413,7 +482,8 @@ function returnWorld() {
   $("#animation-panel").hidden = true;
   setupWorld();
 }
-function begin() {
+function begin(opts = {}) {
+  if (opts.net || opts.local) return beginMatch(opts);
   if (!playerName()) {
     // A real name is required so the winner screen never shows a generic label.
     $("#player-name").classList.add("invalid");
@@ -439,6 +509,26 @@ function begin() {
   // First match: the countdown waits on the controls panel.
   if (!hud.controlsSeen) openControls();
   $("#play").textContent = "Restart the drop ↗";
+}
+// Menu-driven matches (local bots or online); the server drives countdown for online play.
+function beginMatch(opts) {
+  mode = "world";
+  $("#animation-panel").hidden = true;
+  setupWorld(opts);
+  playing = true;
+  environment.traverse((o) => {
+    if (o.userData.previewFade) {
+      o.material.opacity = 1;
+      o.material.depthWrite = true;
+    }
+  });
+  document.body.classList.add("playing");
+  resize();
+  if (!opts.net) match.start();
+  follow.reset(match.players[0].position);
+  controls.enabled = false;
+  hud.unlockAudio();
+  if (!hud.controlsSeen) openControls();
 }
 function trigger(t) {
   match.activate(t);
@@ -572,13 +662,15 @@ function updateMatch(dt) {
     const input = {
       ...gameControls.movement(follow.yaw),
       target: targetInReticle(),
+      aim: camera.getWorldDirection(new T.Vector3()),
     };
     if (!paused) {
       aimAssist(dt);
       accumulator += dt;
     }
+    if (paused && match instanceof NetMatch) accumulator += dt;
     while (accumulator >= RULES.step) {
-      match.step(RULES.step, input);
+      match.step(RULES.step, paused ? { x: 0, z: 0, target: null } : input);
       accumulator -= RULES.step;
     }
     const p = match.players[0];
@@ -600,6 +692,7 @@ function updateMatch(dt) {
   for (const a of actors) {
     const p = a.sim;
     if(p.removed){a.model.visible=false;a.weapon.visible=false;continue;}
+    a.model.visible = !p.respawning;
     if (playing) {
       a.model.position.copy(p.position);
       a.model.rotation.y = p.rotation;
@@ -725,8 +818,10 @@ async function init() {
   const a = actor("girl", rosterRoot, -1.2, 0, 0),
     b = actor("boy", rosterRoot, 1.2, 0, 0);
   window.rosterActors = [a, b];
+  if (!STUDIO) previewFloors = 7;
   setupWorld();
   $("#loading").remove();
+  if (!STUDIO) menu = createMenu(game);
 }
 document.querySelectorAll("[data-world]").forEach(
   (b) =>
@@ -823,9 +918,53 @@ addEventListener("keydown", (e) => {
 });
 $("#controls-open").onclick = openControls;
 $("#controls-open-studio").onclick = openControls;
-$("#exit-match").onclick = returnToLobby;
-$("#results-play-again").onclick = requestRematch;
-$("#results-lobby").onclick = returnToLobby;
+$("#exit-match").onclick = () => {
+  if (!menu) return returnToLobby();
+  if (menu.session === "online" && match?.phase === "active" && !confirm("Leave this match?")) return;
+  menu.exitMatch();
+};
+$("#results-play-again").onclick = () => (menu ? menu.playAgain() : requestRematch());
+$("#results-lobby").onclick = () => (menu ? menu.returnToLobby() : returnToLobby());
+// Game API used by the menu/lobby shell.
+let menu = null,
+  previewFloors = 3,
+  previewKey = "";
+const game = {
+  preview(settings) {
+    if (playing || !files["worlds/volcano"]) return;
+    const key = `${settings.world}/${settings.difficulty}/${settings.floors}`;
+    if (key === previewKey) return;
+    previewKey = key;
+    world = settings.world;
+    difficulty = settings.difficulty;
+    previewFloors = settings.floors;
+    crowd = 2;
+    mode = "world";
+    setupWorld();
+  },
+  startLocal(config) {
+    previewKey = "";
+    begin({ local: config });
+  },
+  startNet(start, connection) {
+    previewKey = "";
+    begin({ net: start, connection });
+  },
+  toMenu() {
+    previewKey = "";
+    mode = "world";
+    setupWorld();
+  },
+  setPlayerName(name) {
+    $("#player-name").value = name;
+  },
+  setCharacter(kind) {
+    selected = kind;
+  },
+  openControls,
+  toggleFullscreen: () => hud.toggleFullscreen(),
+  showingResults: () => !$("#results").hidden,
+};
 function resize() {
   const w = viewport.clientWidth,
     h = viewport.clientHeight;
@@ -835,6 +974,16 @@ function resize() {
   composer.setSize(w, h);
 }
 addEventListener("resize", resize);
+// iOS Safari: browser chrome show/hide and rotation change the visual viewport without a
+// reliable window resize; re-measure after the rotation settles.
+visualViewport?.addEventListener("resize", resize);
+addEventListener("orientationchange", () => setTimeout(resize, 250));
+if (MOBILE) {
+  // Mobile Balanced: skip full-screen bloom passes; slightly brighter exposure keeps lava glowing.
+  bloom.enabled = false;
+  high = false;
+  renderer.toneMappingExposure = 1.22;
+}
 resize();
 let fpsFrames = 0,
   fpsTime = 0;
@@ -903,6 +1052,11 @@ window.dropStudio = {
   follow,
   gameControls,
   winnerFX,
+  get menu() {
+    return menu;
+  },
+  game,
+  mobile: MOBILE,
   get celebration() {
     return celebration;
   },

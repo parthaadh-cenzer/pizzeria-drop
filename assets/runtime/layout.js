@@ -1,12 +1,25 @@
-export const LEVELS = [19.4, 11.8, 4.2];
+// Floors hang from a fixed top level; more floors extend deeper into the cavity.
+// Spacing stays 7.6 m so a normal jump (apex 8.25 m) still reaches exactly one floor up.
+export const TOP_LEVEL = 19.4,
+  FLOOR_SPACING = 7.6,
+  MIN_FLOORS = 1,
+  MAX_FLOORS = 10;
+export const levelsFor = (floors = 3) =>
+  Array.from(
+    { length: Math.max(MIN_FLOORS, Math.min(MAX_FLOORS, Math.round(floors))) },
+    (_, i) => +(TOP_LEVEL - i * FLOOR_SPACING).toFixed(3),
+  );
+export const killYFor = (levels) => +(levels.at(-1) - 4.7).toFixed(3);
+export const LEVELS = levelsFor(3);
 export const TILE_SIZE = 2.25,
   TILE_PITCH = 2.35;
-export function layout(biome, playerCount = 2, difficulty = "easy") {
+export function layout(biome, playerCount = 2, difficulty = "easy", floors = 3) {
+  const levels = levelsFor(floors);
   const count = Math.max(1, Math.min(15, playerCount)),
     side = count <= 4 ? 7 : count <= 9 ? 9 : 11,
     half = (side - 1) / 2,
     tiles = [];
-  for (let level = 0; level < 3; level++)
+  for (let level = 0; level < levels.length; level++)
     for (let gx = -half; gx <= half; gx++)
       for (let gz = -half; gz <= half; gz++) {
         // Designed, interior-only diagonal pairs; never turn the outer square into islands.
@@ -31,7 +44,7 @@ export function layout(biome, playerCount = 2, difficulty = "easy") {
           gx,
           gz,
           x: gx * TILE_PITCH,
-          y: LEVELS[level],
+          y: levels[level],
           z: gz * TILE_PITCH,
           rotationY: burst ? 0 : (((gx + gz + side * 2) % 4) * Math.PI) / 2,
           variant: burst ? "burst" : "normal",
@@ -68,10 +81,11 @@ export function layout(biome, playerCount = 2, difficulty = "easy") {
     tileSize: TILE_SIZE,
     tilePitch: TILE_PITCH,
     tileDelay: 3,
-    killY: -0.5,
-    levels: LEVELS,
+    killY: killYFor(levels),
+    floors: levels.length,
+    levels,
     tiles,
-    spawnPoints: starts.map((t) => ({ x: t.x, y: LEVELS[0] + 4, z: t.z })),
+    spawnPoints: starts.map((t) => ({ x: t.x, y: levels[0] + 4, z: t.z })),
     pickupCandidates: tiles
       .filter((t) => t.startsPresent && !t.hammer && t.variant === "normal")
       .map((t) => t.id),
