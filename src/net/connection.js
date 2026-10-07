@@ -4,8 +4,9 @@ import { RECONNECT_GRACE_MS } from "./protocol.js";
 export function serverUrl() {
   const configured = import.meta.env?.VITE_GAME_SERVER_URL;
   if (configured) return configured;
-  const { protocol, host } = globalThis.location;
-  return `${protocol === "https:" ? "wss" : "ws"}://${host}/ws`;
+  const url = new URL("ws", document.baseURI);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.href;
 }
 const SESSION_KEY = "pizzeria-drop-session";
 export const savedSession = () => {

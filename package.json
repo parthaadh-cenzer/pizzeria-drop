@@ -19,7 +19,8 @@
     "test:multiplayer": "node scripts/acceptance-multiplayer.mjs",
     "test:webkit": "node scripts/acceptance-webkit.mjs",
     "test:load": "node scripts/load-test.mjs",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "test:production": "node scripts/acceptance-production.mjs"
   },
   "keywords": [],
   "author": "",

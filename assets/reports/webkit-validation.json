@@ -15,9 +15,9 @@
   "data": {
     "iPhone WebKit boots: viewport-fit=cover, PWA manifest + icons, Mobile Balanced profile": {
       "viewport": "width=device-width, initial-scale=1, viewport-fit=cover",
-      "manifest": "http://127.0.0.1:50742/manifest.webmanifest",
+      "manifest": "http://127.0.0.1:54712/manifest.webmanifest",
       "apple": "yes",
-      "touchIcon": "http://127.0.0.1:50742/icons/apple-touch-icon.png",
+      "touchIcon": "http://127.0.0.1:54712/icons/apple-touch-icon.png",
       "fullscreenApi": false,
       "mobileProfile": true,
       "pixelRatio": 1.25
@@ -39,7 +39,7 @@
       "aspect": 2.193
     },
     "Quick Play on iPhone WebKit: scene renders, canvas fills viewport without stretch, joystick + JUMP work, FIRE inactive until equipped": {
-      "colours": 23,
+      "colours": 24,
       "inner": [
         750,
         342
@@ -79,7 +79,7 @@
       "aspect": 2.193
     },
     "iPhone WebKit joins a room by link, readies and enters the synchronized match": {
-      "code": "Y6AGZ"
+      "code": "3PUZH"
     },
     "installed Home Screen (standalone) mode hides the Full screen control and the hint": {
       "cls": true,

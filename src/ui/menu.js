@@ -449,7 +449,7 @@ const MARKUP = `
     <button id="btn-join" class="btn">${ICONS.join}<span>JOIN GAME</span></button>
     <button id="btn-quick" class="btn ghost">${ICONS.bolt}<span>QUICK PLAY <small>with bots</small></span></button>
   </div>
-  <div class="menu-foot"><button id="menu-controls" class="chip">${ICONS.help} Controls</button><button id="menu-fullscreen" class="chip">${ICONS.fullscreen} Full screen</button></div>
+  <div class="menu-foot"><button id="menu-controls" class="chip">${ICONS.help} Controls</button><button id="menu-fullscreen" class="chip">${ICONS.fullscreen} Full screen</button><span id="build-version" class="build-version" title="Build">v${__BUILD__.version} · ${__BUILD__.commit}</span></div>
 </section>
 <section class="menu-screen screen-join" aria-label="Join game">
   <div class="menu-card">

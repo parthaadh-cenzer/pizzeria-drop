@@ -59,7 +59,13 @@ npm run build        # production client bundle in dist/
 npm start            # production: one process serves dist/, /ws, /health and /metrics on $PORT
 ```
 
-Quick Play works without the realtime server. `?studio=1` opens the original asset studio (world/character inspection and the legacy regression flows).
+Quick Play works without the realtime server. The normal entrypoint (`/`, or any mount path such as `/play/pizzeria-drop/`) always opens the game shell. The internal World Studio (asset inspection and legacy regression flows) is only reachable through `?studio=1` or the `/studio` route.
+
+### Deploying (Staige or any Node host)
+
+- **Build:** `npm ci && npm run build`
+- **Start:** `npm start` (listens on `$PORT`; serves `dist/`, `/ws`, `/health`, `/metrics`, `/version`)
+- All client URLs are relative to the page, so the app can be mounted at a sub-path. `GET /version` (and the label under the home menu) shows `{ version, commit, buildTime }`, which confirms which build is live.
 
 ### Environment
 
@@ -68,6 +74,7 @@ Quick Play works without the realtime server. `?studio=1` opens the original ass
 | `PORT` | server | `8787` | HTTP + WebSocket port |
 | `HOST` | server | `0.0.0.0` | Bind address |
 | `STATIC_DIR` | server | `dist` | Built client to serve (SPA fallback) |
+| `SOURCE_COMMIT` / `GIT_COMMIT` | build | `git rev-parse HEAD` | Commit shown in `/version` when the build has no `.git` |
 | `ALLOWED_ORIGINS` | server | (any) | Comma-separated origins allowed to open `/ws` |
 | `MAX_ROOMS` | server | `500` | Room cap per process |
 | `VITE_GAME_SERVER_URL` | client build | same-origin `/ws` | Full `wss://…/ws` URL when the realtime server is on another origin |
@@ -85,6 +92,7 @@ npm run build            # then, against the production build:
 npm run test:multiplayer # 2 real browsers: host/join/ready/start/sync/winner/lobby, at 0/50/100/150 ms latency
 npm run test:webkit      # iPhone-class WebKit: boot, render, touch, immersive mode, rotate, PWA, online join
 npm run test:load        # 15 players (1 browser + 5 headless humans + 9 bots), 10 floors
+npm run test:production  # `npm start` server: root and /play/pizzeria-drop mount show the game shell
 ```
 
 Browser tests use the installed Chrome (`C:/Program Files/Google/Chrome/Application/chrome.exe`) and Playwright WebKit (`npx playwright install webkit`).

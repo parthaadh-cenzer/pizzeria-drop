@@ -401,6 +401,9 @@ GENERALIZABLE workflow.
 
 # Staige-Compatible Deployment Architecture
 
+Also: never let the static HTML default to an internal tool; build with relative URLs (`base: "./"`) and set a mount-aware `<base>` before any asset tag; expose `/version`; verify with the exact production start command at both `/` and a sub-path.
+
+
 GENERALIZABLE workflow.
 - PURPOSE: reproducible, host-agnostic deployment of a realtime web game.
 - WHEN TO USE: deploying to a game platform or PaaS.
@@ -522,6 +525,7 @@ GENERALIZABLE: PURPOSE: identify real runtime cost. WHEN: maximum population/haz
 21. A global CSS rule hiding the studio's header/footer elements also hid the new lobby's header/footer; avoid element selectors in shared stylesheets.
 22. HUD/FX consumed events by timestamp; network events arrive with older timestamps, so consume by sequence number.
 23. Chrome ignores display-mode emulation over CDP; iOS standalone is testable via navigator.standalone in WebKit.
+24. Production showed the old studio because index.html carried studio markup statically and the build used root-absolute asset URLs; under a platform mount path the bundle 404'd and the static markup remained. Fixes: relative base plus a runtime <base>, internal tools hidden by default in HTML (not only by JS), a prefix-tolerant server, /version for deploy verification, and a test that runs the real start command behind a prefix proxy.
 
 # Anti-Patterns
 

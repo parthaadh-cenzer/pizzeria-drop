@@ -24,6 +24,13 @@ export function createServer({
   const log = quiet ? () => {} : (...a) => console.log(new Date().toISOString(), ...a);
   const rooms = new RoomManager({ log });
   const started = Date.now();
+  const readVersion = () => {
+    try {
+      return fs.readFileSync(path.join(staticDir, "version.json"), "utf8");
+    } catch {
+      return JSON.stringify({ version: null, commit: null, buildTime: null, note: "client build missing" });
+    }
+  };
   const types = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -42,6 +49,10 @@ export function createServer({
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       return res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, uptime: Math.round((Date.now() - started) / 1000), ...rooms.stats() }));
     }
+    if (url.pathname.endsWith("/version")) {
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      return res.end(readVersion());
+    }
     if (url.pathname === "/metrics") {
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       return res.end(JSON.stringify({ ...rooms.stats(), rooms: [...rooms.rooms.values()].map((r) => r.metricsSummary()) }));
@@ -51,12 +62,26 @@ export function createServer({
       res.writeHead(404);
       return res.end("Client build not found. Run npm run build.");
     }
-    let file = path.normalize(path.join(staticDir, decodeURIComponent(url.pathname)));
-    if (!file.startsWith(staticDir)) {
-      res.writeHead(403);
-      return res.end();
+    // Mount-path tolerant: "/play/pizzeria-drop/assets/x.js" also resolves to dist/assets/x.js
+    // when a platform forwards the prefix unstripped. Unknown routes get index.html (SPA).
+    const parts = decodeURIComponent(url.pathname).split("/").filter(Boolean);
+    let file = path.join(staticDir, "index.html");
+    for (let i = 0; i < parts.length; i++) {
+      const candidate = path.normalize(path.join(staticDir, ...parts.slice(i)));
+      if (!candidate.startsWith(staticDir)) {
+        res.writeHead(403);
+        return res.end();
+      }
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        file = candidate;
+        break;
+      }
     }
-    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(staticDir, "index.html");
+    // Missing asset files must 404 (not index.html), so stale/wrong paths are visible.
+    if (file.endsWith("index.html") && /\.[a-z0-9]+$/i.test(url.pathname) && !url.pathname.endsWith(".html")) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      return res.end("Not found");
+    }
     const ext = path.extname(file);
     const immutable = /[\\/]assets[\\/].*-[A-Za-z0-9_-]{8}\./.test(file);
     res.writeHead(200, {
@@ -69,7 +94,7 @@ export function createServer({
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url, "http://localhost");
-    if (url.pathname !== "/ws") return socket.destroy();
+    if (!url.pathname.endsWith("/ws")) return socket.destroy();
     if (allowedOrigins.length && !allowedOrigins.includes(req.headers.origin)) return socket.destroy();
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
   });

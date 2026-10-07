@@ -2,24 +2,53 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Mount-path aware: the app may be served at "/", "/play/pizzeria-drop" or any sub-path.
+      // Every relative URL (bundle, GLBs, manifest, WebSocket) resolves against this <base>.
+      (function () {
+        var p = location.pathname, studio = /\/studio\/?$/.test(p);
+        if (studio) p = p.replace(/\/studio\/?$/, "/");
+        else if (!/\/$/.test(p) && !/\.[a-z0-9]+$/i.test(p)) {
+          // Directory-style mount without a trailing slash (e.g. /play/pizzeria-drop): normalise once.
+          location.replace(p + "/" + location.search + location.hash);
+          return;
+        }
+        else if (!/\/$/.test(p)) p = p.replace(/[^/]*$/, "");
+        var b = document.createElement("base");
+        b.href = p;
+        document.head.appendChild(b);
+        // World Studio is an internal tool: only with ?studio=1 or the /studio route.
+        if (studio || /[?&]studio(=|&|$)/.test(location.search))
+          document.documentElement.className = "studio-mode";
+      })();
+    </script>
+    <style>
+      /* Before (or without) JavaScript the game shell never shows the studio UI. */
+      html:not(.studio-mode) body > aside,
+      html:not(.studio-mode) main > header,
+      html:not(.studio-mode) main > .world-heading,
+      html:not(.studio-mode) main > footer,
+      html:not(.studio-mode) main > #toast { display: none !important; }
+      html, body { background: #0d0f1a; }
+    </style>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Pizzeria Drop</title>
     <meta name="description" content="Last pizzaiolo standing: a vertical tile-survival party game." />
     <meta name="theme-color" content="#0d0f1a" />
     <meta name="color-scheme" content="dark" />
-    <link rel="icon" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="favicon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <!-- iOS Home Screen web app: launches without Safari chrome (true app-like fullscreen). -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Pizzeria Drop" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <aside>
-      <a class="brand" href="/" aria-label="Pizzeria Drop home"
+      <a class="brand" href="./" aria-label="Pizzeria Drop home"
         ><span class="brand-icon">◒</span
         ><span
           >PIZZERIA<br /><b>DROP<span class="dot">.</span></b></span
@@ -124,6 +153,17 @@
         <p>Warming up the world…</p>
       </div>
     </main>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
+    <script>
+      // If the game bundle cannot load (wrong deploy path, network), say so instead of showing a stale UI.
+      setTimeout(function () {
+        if (window.dropStudio) return;
+        var l = document.getElementById("loading");
+        if (l) l.innerHTML = '<span class="loading-logo">PD.</span><p>Pizzeria Drop could not load. Check your connection and refresh.</p>';
+      }, 20000);
+      // No service worker is used; remove any registered by an earlier deployment so it cannot pin an old shell.
+      if ("serviceWorker" in navigator)
+        navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }).catch(function () {});
+    </script>
   </body>
 </html>

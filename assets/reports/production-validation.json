@@ -1,0 +1,22 @@
+{
+  "root": {
+    "earlyAsideDisplay": "none",
+    "version": "v1.0.0 · 74b2f2e",
+    "versionEndpoint": {
+      "version": "1.0.0",
+      "commit": "74b2f2e",
+      "commitFull": "74b2f2ee0c3eb515b5ba96613aad2798b3ed2c0c",
+      "buildTime": "2026-10-07T17:58:07.749Z"
+    }
+  },
+  "mounted": {
+    "earlyAsideDisplay": "none",
+    "version": "v1.0.0 · 74b2f2e",
+    "versionEndpoint": {
+      "version": "1.0.0",
+      "commit": "74b2f2e",
+      "commitFull": "74b2f2ee0c3eb515b5ba96613aad2798b3ed2c0c",
+      "buildTime": "2026-10-07T17:58:07.749Z"
+    }
+  }
+}

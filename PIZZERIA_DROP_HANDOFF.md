@@ -2,6 +2,26 @@
 
 Updated October 7, 2026 (V1: multiplayer rooms, iPhone/WebKit compatibility, mobile UX). Project root: `G:/pizseria drop`. Public repo: https://github.com/parthaadh-cenzer/pizzeria-drop (branch `main`). **Not deployed to Staige yet.**
 
+## Production entrypoint fix (Staige showed the old World Studio)
+
+**Root cause:** `index.html` contained the World Studio markup as static HTML, and JavaScript only hid it after the bundle ran. The Vite build emitted root-absolute URLs (`/assets/index-*.js`, `/assets/*.css`), and GLBs were loaded from `/assets/...`. When the game is mounted under a path (for example `/play/pizzeria-drop`), those requests go to the platform's domain root and 404. The bundle never runs, so the static World Studio markup is what appears. This was reproduced exactly with a prefix proxy: 404s for `/assets/index-*.js/.css`, then the World Studio text. At `/` on `npm start` the menu worked, which is why it passed locally.
+
+**File responsible:** `index.html`, combined with Vite's default `base: "/"` and the absolute GLB path in `src/main.js`.
+
+**Service worker / PWA:** not a factor. No service worker was ever shipped (only a manifest). As a guard, the page now unregisters any service worker registered by an earlier deployment. `index.html` and `/version` are served `no-cache`/`no-store`; hashed assets are immutable.
+
+**Fixes:**
+- An early inline script sets a mount-aware `<base>` (and normalises `/play/pizzeria-drop` to `/play/pizzeria-drop/`).
+- An inline style hides all studio UI unless `?studio=1` or `/studio` is used, even if JS fails.
+- Vite `base: "./"`; GLBs and the WebSocket URL are resolved from `document.baseURI`.
+- The server serves static files with any forwarded prefix and accepts `…/ws`.
+- `/version` plus a small build label (version · commit) under the home menu.
+- After 20 s without the bundle, the page shows a "could not load" message instead of a stale UI.
+
+**Evidence:** `npm run test:production` starts the real `npm start` server and opens `/` and `/play/pizzeria-drop` behind a prefix proxy. Both show HOST GAME / JOIN GAME / QUICK PLAY with no studio, before or after JS; host lobby settings, an 8-floor bot match, the join screen and Quick Play work; `?studio=1` opens the studio. Screenshots: `assets/reports/production-root.png`, `production-mounted.png`.
+
+**Staige:** BUILD `npm ci && npm run build` · START `npm start` · env `PORT` (provided by host). Optional: `VITE_GAME_SERVER_URL` (only if the realtime server is on a different origin; build time), `ALLOWED_ORIGINS`, `SOURCE_COMMIT` (build-time commit label if `.git` is absent), `MAX_ROOMS`. Do not set `ALLOW_TEST_HOOKS` or `SIM_*`.
+
 ## iPhone root cause (investigated, not guessed)
 
 Reproduced with Playwright WebKit 26 using iPhone 13 descriptors (portrait and landscape) against the dev and production builds.

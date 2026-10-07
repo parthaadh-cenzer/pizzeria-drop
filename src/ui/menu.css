@@ -221,6 +221,12 @@ body:not(.studio) main {
   display: flex;
   gap: 10px;
 }
+.build-version {
+  align-self: center;
+  font-size: 11px;
+  color: #8a8fa3;
+  letter-spacing: 0.5px;
+}
 .menu-error {
   position: fixed;
   left: 50%;

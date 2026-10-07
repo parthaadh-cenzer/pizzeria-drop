@@ -7,7 +7,7 @@
     "[0ms] tile activations share server timestamps and collapse for both clients",
     "[0ms] rocket pickup exclusive and identical on both clients",
     "[0ms] eliminations and winner (Parth) synchronized; both show results",
-    "[0ms] return to lobby / play again keep the room (W4NSM) and settings for everyone",
+    "[0ms] return to lobby / play again keep the room (NJFRY) and settings for everyone",
     "[0ms] page refresh resumes the same player via reconnect token (no duplicate)",
     "[0ms] unknown room shows \"Room not found\" instead of an endless connecting state",
     "[50ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)",
@@ -16,33 +16,33 @@
     "[50ms] tile activations share server timestamps and collapse for both clients",
     "[50ms] rocket pickup exclusive and identical on both clients",
     "[50ms] eliminations and winner (Parth) synchronized; both show results",
-    "[50ms] return to lobby / play again keep the room (2GFKZ) and settings for everyone",
+    "[50ms] return to lobby / play again keep the room (9VUG9) and settings for everyone",
     "[100ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)",
     "[100ms] ready → host start → both clients in the same 5-floor Cityscape match with 2 humans + 2 bots",
     "[100ms] movement visible remotely, interpolated without teleports",
     "[100ms] tile activations share server timestamps and collapse for both clients",
     "[100ms] rocket pickup exclusive and identical on both clients",
     "[100ms] eliminations and winner (Parth) synchronized; both show results",
-    "[100ms] return to lobby / play again keep the room (6NNVG) and settings for everyone",
+    "[100ms] return to lobby / play again keep the room (RP78V) and settings for everyone",
     "[150ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)",
     "[150ms] ready → host start → both clients in the same 5-floor Cityscape match with 2 humans + 2 bots",
     "[150ms] movement visible remotely, interpolated without teleports",
     "[150ms] tile activations share server timestamps and collapse for both clients",
     "[150ms] rocket pickup exclusive and identical on both clients",
     "[150ms] eliminations and winner (Parth) synchronized; both show results",
-    "[150ms] return to lobby / play again keep the room (TR4AH) and settings for everyone"
+    "[150ms] return to lobby / play again keep the room (2PGWY) and settings for everyone"
   ],
   "results": {
     "[0ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)": {
-      "code": "W4NSM"
+      "code": "NJFRY"
     },
     "[0ms] movement visible remotely, interpolated without teleports": {
-      "moved": 3.24,
-      "maxStepPerSample": 0.159,
+      "moved": 3.21,
+      "maxStepPerSample": 0.17,
       "localSnaps": 0
     },
     "[0ms] tile activations share server timestamps and collapse for both clients": {
-      "sharedActivations": 8
+      "sharedActivations": 5
     },
     "[0ms] rocket pickup exclusive and identical on both clients": {
       "owner": [
@@ -50,15 +50,15 @@
       ]
     },
     "[50ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)": {
-      "code": "2GFKZ"
+      "code": "9VUG9"
     },
     "[50ms] movement visible remotely, interpolated without teleports": {
-      "moved": 3.17,
-      "maxStepPerSample": 0.139,
+      "moved": 3.13,
+      "maxStepPerSample": 0.131,
       "localSnaps": 0
     },
     "[50ms] tile activations share server timestamps and collapse for both clients": {
-      "sharedActivations": 6
+      "sharedActivations": 9
     },
     "[50ms] rocket pickup exclusive and identical on both clients": {
       "owner": [
@@ -66,15 +66,15 @@
       ]
     },
     "[100ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)": {
-      "code": "6NNVG"
+      "code": "RP78V"
     },
     "[100ms] movement visible remotely, interpolated without teleports": {
-      "moved": 2.92,
-      "maxStepPerSample": 0.123,
+      "moved": 3.01,
+      "maxStepPerSample": 0.128,
       "localSnaps": 0
     },
     "[100ms] tile activations share server timestamps and collapse for both clients": {
-      "sharedActivations": 6
+      "sharedActivations": 13
     },
     "[100ms] rocket pickup exclusive and identical on both clients": {
       "owner": [
@@ -82,15 +82,15 @@
       ]
     },
     "[150ms] host creates room, guest joins by link/code; identical settings and player list (HOST, BOT badges)": {
-      "code": "TR4AH"
+      "code": "2PGWY"
     },
     "[150ms] movement visible remotely, interpolated without teleports": {
-      "moved": 2.53,
-      "maxStepPerSample": 0.091,
+      "moved": 2.54,
+      "maxStepPerSample": 0.099,
       "localSnaps": 0
     },
     "[150ms] tile activations share server timestamps and collapse for both clients": {
-      "sharedActivations": 9
+      "sharedActivations": 7
     },
     "[150ms] rocket pickup exclusive and identical on both clients": {
       "owner": [

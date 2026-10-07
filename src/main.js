@@ -25,7 +25,7 @@ import "./hud-v1.css";
 import { bake } from "../assets/runtime/props.js";
 
 // ?studio=1 keeps the original asset studio sidebar (asset inspection + legacy regression tests).
-const STUDIO = new URLSearchParams(location.search).has("studio");
+const STUDIO = document.documentElement.classList.contains("studio-mode");
 document.body.classList.toggle("studio", STUDIO);
 // Automatic quality profile: phones/tablets get "Mobile Balanced" (no user configuration).
 const MOBILE =
@@ -139,7 +139,7 @@ const toast = (text) => {
   $("#toast").textContent = text;
 };
 async function get(file) {
-  if (!files[file]) files[file] = await loader.loadAsync(`/assets/${file}.glb`);
+  if (!files[file]) files[file] = await loader.loadAsync(new URL(`assets/${file}.glb`, document.baseURI).href);
   return files[file];
 }
 function action(actor, name) {
