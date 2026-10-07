@@ -1,0 +1,747 @@
+import * as T from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone } from "three/addons/utils/SkeletonUtils.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { lavaMaterial, layout } from "../assets/runtime/worlds.js";
+import { mesh, box, material, rng } from "../assets/runtime/palette.js";
+import { makeEffects } from "../assets/runtime/effects.js";
+import { bake } from "../assets/runtime/props.js";
+
+const $ = (s) => document.querySelector(s),
+  viewport = $("#viewport"),
+  scene = new T.Scene(),
+  camera = new T.PerspectiveCamera(42, 1, 0.1, 160);
+const renderer = new T.WebGLRenderer({
+  antialias: true,
+  powerPreference: "high-performance",
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T.PCFSoftShadowMap;
+renderer.toneMapping = T.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+viewport.appendChild(renderer.domElement);
+renderer.info.autoReset = false;
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.47;
+controls.minDistance = 4;
+controls.maxDistance = 75;
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new T.Vector2(800, 600), 0.27, 0.55, 1.1);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const hemi = new T.HemisphereLight(0xb6c9ff, 0x57404a, 2.15);
+scene.add(hemi);
+const sun = new T.DirectionalLight(0xffe0ba, 3.2);
+sun.position.set(4, 30, 16);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {
+  left: -19,
+  right: 19,
+  top: 19,
+  bottom: -19,
+  near: 1,
+  far: 70,
+});
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.035;
+scene.add(sun);
+const under = new T.PointLight(0xff6020, 160, 42, 2);
+under.position.set(0, 3, 0);
+scene.add(under);
+const rim = new T.DirectionalLight(0x9b98ff, 2);
+rim.position.set(-15, 12, -10);
+scene.add(rim);
+const loader = new GLTFLoader(),
+  files = {};
+let world = "volcano",
+  difficulty = "medium",
+  selected = "girl",
+  mode = "world",
+  crowd = 2,
+  actors = [],
+  tiles = [],
+  batches = [],
+  hammers = [],
+  pickups = [],
+  cars = [],
+  worldRoot = new T.Group(),
+  rosterRoot = new T.Group(),
+  playing = false,
+  high = true,
+  elapsed = 0;
+scene.add(worldRoot, rosterRoot);
+rosterRoot.visible = false;
+const lava = new T.Mesh(
+  new T.PlaneGeometry(70, 70).rotateX(-Math.PI / 2),
+  lavaMaterial(),
+);
+lava.position.y = -1.2;
+const keys = new Set();
+let player = null,
+  velocityY = 0,
+  grounded = false,
+  jumpRequested = false,
+  projectiles = [],
+  remaining = 0;
+const clock = new T.Clock(),
+  dummy = new T.Object3D();
+let effects = null;
+const dynamicResources = [];
+const toast = (text) => {
+  $("#toast").textContent = text;
+};
+async function get(file) {
+  if (!files[file]) files[file] = await loader.loadAsync(`/assets/${file}.glb`);
+  return files[file];
+}
+function action(actor, name) {
+  if (actor.current === name) return;
+  const clip = actor.clips.find((c) => c.name === name);
+  if (!clip) return;
+  actor.mixer.stopAllAction();
+  const a = actor.mixer.clipAction(clip);
+  if (["jump", "landing", "hit", "recovery"].includes(name)) {
+    a.setLoop(T.LoopOnce);
+    a.clampWhenFinished = true;
+  }
+  a.reset().play();
+  actor.current = name;
+}
+function actor(kind, parent, x, y, z) {
+  const f = files[`characters/${kind}`],
+    model = clone(f.scene);
+  model.traverse((o) => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = false;
+    }
+  });
+  model.position.set(x, y, z);
+  parent.add(model);
+  const a = {
+    model,
+    mixer: new T.AnimationMixer(model),
+    clips: f.animations,
+    kind,
+    current: null,
+  };
+  action(a, "idle");
+  return a;
+}
+function clearWorld() {
+  effects?.dispose();
+  for (const r of dynamicResources) r.dispose();
+  dynamicResources.length = 0;
+  for (const b of batches) b.mesh.dispose();
+  for (const a of actors) a.mixer.uncacheRoot(a.model);
+  for (const p of projectiles) {
+    scene.remove(p.mesh);
+    p.mesh.geometry.dispose();
+  }
+  projectiles = [];
+  worldRoot.clear();
+  actors = [];
+  batches = [];
+  tiles = [];
+  hammers = [];
+  pickups = [];
+  cars = [];
+}
+function setupTiles() {
+  const data = layout(world);
+  tiles = data.tiles.map((t) => ({ ...t, expires: Infinity, gone: false }));
+  // Randomize pickups only among valid, existing normal tiles. Saved layouts retain art placements.
+  for (const t of tiles) t.pickup = false;
+  for (let level = 0; level < 3; level++) {
+    const eligible = tiles.filter(
+      (t) => t.level === level && !t.hammer && t.variant === "normal",
+    );
+    for (let i = 0; i < 2; i++) {
+      const index = Math.floor(Math.random() * eligible.length);
+      eligible.splice(index, 1)[0].pickup = true;
+    }
+  }
+  remaining = tiles.length;
+  for (const variant of ["normal", "burst"]) {
+    const entries = tiles.filter((t) => t.variant === variant);
+    const proto = files[`props/${world}-${variant}`].scene;
+    proto.traverse((o) => {
+      if (!o.isMesh) return;
+      const inst = new T.InstancedMesh(o.geometry, o.material, entries.length);
+      inst.castShadow = true;
+      inst.receiveShadow = true;
+      inst.instanceMatrix.setUsage(T.DynamicDrawUsage);
+      worldRoot.add(inst);
+      batches.push({ mesh: inst, entries });
+      for (let i = 0; i < entries.length; i++) {
+        dummy.position.set(entries[i].x, entries[i].y, entries[i].z);
+        dummy.rotation.set(0, entries[i].rotationY, 0);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+        inst.setColorAt(i, new T.Color(0xffffff));
+      }
+    });
+  }
+  for (const t of tiles) {
+    if (t.hammer && difficulty !== "easy") {
+      const root = new T.Group();
+      const m = files["props/hammer"].scene.clone();
+      root.add(m);
+      root.position.set(t.x, t.y + 0.14, t.z);
+      worldRoot.add(root);
+      hammers.push({ root, tile: t, phase: t.level * 1.6 + t.x, angle: 0 });
+    }
+    if (t.pickup) {
+      const m = files["props/rocket"].scene.clone();
+      m.position.set(t.x, t.y + 0.4, t.z);
+      worldRoot.add(m);
+      pickups.push({ root: m, tile: t, collected: false });
+    }
+  }
+}
+function setCamera() {
+  camera.position.set(28, 29, 34);
+  controls.target.set(0, 7.2, 0);
+  controls.update();
+}
+function spawnActors() {
+  for (const a of actors) {
+    worldRoot.remove(a.model);
+    a.mixer.uncacheRoot(a.model);
+  }
+  actors = [];
+  for (let i = 0; i < crowd; i++) {
+    const t = tiles.filter((t) => t.level === 0 && !t.hammer && !t.pickup)[
+      (i * 3 + 4) %
+        tiles.filter((t) => t.level === 0 && !t.hammer && !t.pickup).length
+    ];
+    const a = actor(
+      i === 0 ? selected : i % 2 ? "boy" : "girl",
+      worldRoot,
+      t.x,
+      t.y + 0.15,
+      t.z,
+    );
+    a.home = new T.Vector3(t.x, t.y + 0.15, t.z);
+    a.model.rotation.y = 0.5;
+    a.phase = i * 0.7;
+    a.mixer.update(a.phase);
+    // A bounded shadow budget avoids 15 characters entering every shadow pass.
+    a.model.traverse((o) => {
+      if (o.isMesh) o.castShadow = i < 4;
+    });
+    actors.push(a);
+  }
+  player = actors[0];
+}
+function setupWorld() {
+  playing = false;
+  document.body.classList.remove("playing");
+  $("#play").innerHTML = "Take the drop <span>↗</span>";
+  clearWorld();
+  worldRoot.add(files[`worlds/${world}`].scene.clone());
+  setupTiles();
+  spawnActors();
+  under.visible = true;
+  effects = makeEffects(world);
+  worldRoot.add(effects.group);
+  const city = world === "cityscape";
+  scene.background = new T.Color(city ? 0x515777 : 0x765368);
+  scene.fog = new T.Fog(city ? 0x515777 : 0x765368, 43, 105);
+  hemi.groundColor.set(city ? 0x3f435e : 0x693b36);
+  under.color.set(city ? 0xc365ee : 0xff6020);
+  sun.color.set(city ? 0xffddcf : 0xffdab9);
+  if (!city) worldRoot.add(lava);
+  else {
+    const floor = mesh(
+      new T.CylinderGeometry(14, 14, 1, 48),
+      0x252f49,
+      worldRoot,
+      [0, -2, 0],
+      [1, 1, 1],
+    );
+    floor.receiveShadow = true;
+    dynamicResources.push(floor.geometry);
+    const wheel = new T.CylinderGeometry(0.2, 0.2, 0.13, 8).rotateX(
+      Math.PI / 2,
+    );
+    dynamicResources.push(wheel);
+    const carPrototypes = [];
+    for (let i = 0; i < 2; i++) {
+      const car = new T.Group();
+      mesh(
+        box,
+        i % 2 ? 0xdac06a : 0x75b8c9,
+        car,
+        [0, 0.4, 0],
+        [1.6, 0.55, 0.76],
+      );
+      mesh(box, 0x263952, car, [-0.12, 0.78, 0], [0.8, 0.35, 0.68]);
+      for (const x of [-0.45, 0.45])
+        for (const z of [-0.4, 0.4]) mesh(wheel, 0x202236, car, [x, 0.19, z]);
+      const merged = bake(car);
+      merged.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = false;
+          dynamicResources.push(o.geometry, o.material);
+        }
+      });
+      carPrototypes.push(merged);
+    }
+    for (let i = 0; i < 10; i++) {
+      const car = carPrototypes[i % 2].clone();
+      car.position.set(i * 4 - 20, 15.4, -19);
+      worldRoot.add(car);
+      cars.push(car);
+    }
+  }
+  // A single bounded particle draw for embers / city dust.
+  const random = rng(99),
+    points = [];
+  for (let i = 0; i < 90; i++)
+    points.push((random() - 0.5) * 28, random() * 18, (random() - 0.5) * 28);
+  const geo = new T.BufferGeometry();
+  geo.setAttribute("position", new T.Float32BufferAttribute(points, 3));
+  const sparks = new T.Points(
+    geo,
+    new T.PointsMaterial({
+      color: city ? 0xa7bdff : 0xffa743,
+      size: 0.065,
+      sizeAttenuation: true,
+    }),
+  );
+  sparks.name = "sparks";
+  worldRoot.add(sparks);
+  dynamicResources.push(geo, sparks.material);
+  worldRoot.visible = mode === "world";
+  rosterRoot.visible = mode === "roster";
+  if (mode === "world") setCamera();
+  $("#biome-label").textContent = city
+    ? "WORLD 02 / CITYSCAPE"
+    : "WORLD 01 / VOLCANO";
+  $("#world-title").innerHTML =
+    (city ? "Skyline Collapse" : "Molten Crater") + "<span>™</span>";
+  $("#world-description").textContent = city
+    ? "The city never sleeps. Neither does gravity."
+    : "Warm hearts. Unstable ground.";
+  toast("Drag to orbit · Scroll to explore");
+}
+function roster() {
+  playing = false;
+  document.body.classList.remove("playing");
+  mode = "roster";
+  under.visible = false;
+  worldRoot.visible = false;
+  rosterRoot.visible = true;
+  scene.fog = null;
+  scene.background = new T.Color(0x2b2c40);
+  camera.position.set(1.2, 2.8, 8.5);
+  controls.target.set(0, 1.35, 0);
+  controls.update();
+  $("#animation-panel").hidden = false;
+  $("#biome-label").textContent = "THE ORIGINAL DUO / SHARED RIG";
+  $("#world-title").innerHTML = "Ready to drop<span>™</span>";
+  $("#world-description").textContent =
+    "Red hoodie. Blue jacket. Same fearless energy.";
+  toast("Drag to orbit · Choose an animation to inspect");
+}
+function returnWorld() {
+  mode = "world";
+  $("#animation-panel").hidden = true;
+  setupWorld();
+}
+function begin() {
+  if (mode === "roster") returnWorld();
+  setupWorld();
+  playing = true;
+  document.body.classList.add("playing");
+  player.model.position.set(-4.7, 16.2, -7.05);
+  velocityY = 0;
+  grounded = false;
+  action(player, "fall");
+  $("#play").textContent = "Restart the drop ↗";
+  toast("WASD / arrows move · Space jumps · F fires a collected rocket");
+}
+function trigger(t) {
+  if (t.expires === Infinity) t.expires = elapsed + 3;
+}
+function updateTiles() {
+  remaining = 0;
+  for (const t of tiles) {
+    if (elapsed >= t.expires) t.gone = true;
+    if (!t.gone) remaining++;
+  }
+  for (const b of batches) {
+    let changed = false;
+    for (let i = 0; i < b.entries.length; i++) {
+      const t = b.entries[i];
+      if (t.expires === Infinity) continue;
+      changed = true;
+      const progress = T.MathUtils.clamp((elapsed - (t.expires - 3)) / 3, 0, 1);
+      dummy.position.set(
+        t.x + (t.gone ? 0 : Math.sin(elapsed * 65) * 0.045 * progress),
+        t.y,
+        t.z,
+      );
+      dummy.rotation.set(0, t.rotationY, 0);
+      dummy.scale.setScalar(t.gone ? 0 : 1);
+      dummy.updateMatrix();
+      b.mesh.setMatrixAt(i, dummy.matrix);
+      b.mesh.setColorAt(
+        i,
+        new T.Color(0xffffff).lerp(new T.Color(0xff4325), progress),
+      );
+    }
+    if (changed) {
+      b.mesh.instanceMatrix.needsUpdate = true;
+      b.mesh.instanceColor.needsUpdate = true;
+    }
+  }
+}
+function updatePlayer(dt) {
+  const wasGrounded = grounded;
+  const p = player.model.position,
+    prevY = p.y;
+  let x =
+      (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) -
+      (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0),
+    z =
+      (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) -
+      (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0);
+  const movement = new T.Vector3(x, 0, z);
+  if (movement.length()) {
+    movement.normalize().multiplyScalar(5.3 * dt);
+    p.add(movement);
+    player.model.rotation.y = Math.atan2(movement.x, movement.z);
+  }
+  if (jumpRequested && grounded) {
+    velocityY = 7.5;
+    grounded = false;
+    action(player, "jump");
+  }
+  jumpRequested = false;
+  velocityY -= 19 * dt;
+  p.y += velocityY * dt;
+  grounded = false;
+  for (const t of tiles) {
+    if (t.gone) continue;
+    const top = t.y + 0.15;
+    if (
+      velocityY <= 0 &&
+      prevY >= top - 0.03 &&
+      p.y <= top &&
+      Math.abs(p.x - t.x) < 1.14 &&
+      Math.abs(p.z - t.z) < 1.14
+    ) {
+      p.y = top;
+      velocityY = 0;
+      grounded = true;
+      trigger(t);
+      if (t.variant === "burst" && difficulty !== "easy") {
+        velocityY = 11.5;
+        grounded = false;
+        action(player, "jump");
+        toast("LAUNCH! Orange chevrons send you upward.");
+      }
+      break;
+    }
+  }
+  if (grounded && !wasGrounded) {
+    action(player, "landing");
+    player.transitionUntil = elapsed + 0.2;
+  }
+  if (elapsed > (player.transitionUntil || 0)) {
+    if (grounded) action(player, movement.length() ? "run" : "idle");
+    else if (velocityY < 0) action(player, "fall");
+  }
+  for (const h of hammers) {
+    if (h.tile.gone) continue;
+    if (
+      p.distanceTo(h.root.position) < 1.35 &&
+      Math.abs(h.angle) > 0.6 &&
+      elapsed > (player.lastHit || 0) + 1
+    ) {
+      player.lastHit = elapsed;
+      p.x += Math.sign(p.x - h.root.position.x || 1) * 1.7;
+      velocityY = 4;
+      action(player, "hit");
+      player.transitionUntil = elapsed + 0.35;
+      toast("Hammer hit! Keep moving.");
+    }
+  }
+  for (const pickup of pickups) {
+    if (
+      !pickup.collected &&
+      !pickup.tile.gone &&
+      p.distanceTo(pickup.root.position) < 1
+    ) {
+      pickup.collected = true;
+      pickup.root.visible = false;
+      player.ammo = (player.ammo || 0) + 1;
+      toast("Rocket collected · Press F to fire");
+    }
+  }
+  if (p.y < -0.5) {
+    playing = false;
+    document.body.classList.remove("playing");
+    action(player, "fall");
+    toast("That’s the drop. Hit Reset or Take the drop to try again.");
+  }
+  if (playing) {
+    const desired = p.clone().add(new T.Vector3(13, 13, 16));
+    camera.position.lerp(desired, 1 - Math.exp(-dt * 2));
+    controls.target.lerp(
+      p.clone().add(new T.Vector3(0, 1, 0)),
+      1 - Math.exp(-dt * 3),
+    );
+  }
+}
+function fire() {
+  if (!playing || !player.ammo) return;
+  player.ammo--;
+  const m = mesh(
+    new T.SphereGeometry(0.14, 8, 6),
+    0xffb934,
+    scene,
+    player.model.position
+      .clone()
+      .add(new T.Vector3(0, 1, 0))
+      .toArray(),
+    [1, 1, 2],
+    1,
+  );
+  const dir = new T.Vector3(
+    Math.sin(player.model.rotation.y),
+    0,
+    Math.cos(player.model.rotation.y),
+  );
+  projectiles.push({ mesh: m, dir, ttl: 2 });
+  toast("Rocket away!");
+}
+async function init() {
+  await Promise.all(
+    [
+      "characters/girl",
+      "characters/boy",
+      "worlds/volcano",
+      "worlds/cityscape",
+      "props/hammer",
+      "props/rocket",
+      ...["volcano", "cityscape"].flatMap((w) =>
+        ["normal", "burst"].map((v) => `props/${w}-${v}`),
+      ),
+    ].map(get),
+  );
+  const pedMat = material(0x3e4157);
+  for (const x of [-1.2, 1.2]) {
+    const pedestal = new T.Mesh(
+      new T.CylinderGeometry(1.15, 1.22, 0.18, 48),
+      pedMat,
+    );
+    pedestal.position.set(x, -0.16, 0);
+    pedestal.receiveShadow = true;
+    rosterRoot.add(pedestal);
+  }
+  const a = actor("girl", rosterRoot, -1.2, 0, 0),
+    b = actor("boy", rosterRoot, 1.2, 0, 0);
+  window.rosterActors = [a, b];
+  setupWorld();
+  $("#loading").remove();
+}
+document.querySelectorAll("[data-world]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      world = b.dataset.world;
+      document
+        .querySelectorAll("[data-world]")
+        .forEach((x) => x.classList.toggle("active", x === b));
+      mode = "world";
+      $("#animation-panel").hidden = true;
+      setupWorld();
+    }),
+);
+document.querySelectorAll("[data-character]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      selected = b.dataset.character;
+      document
+        .querySelectorAll("[data-character]")
+        .forEach((x) => x.classList.toggle("selected", x === b));
+      if (mode === "world") {
+        if (playing) {
+          const p = player.model.position.clone();
+          spawnActors();
+          player.model.position.copy(p);
+        } else spawnActors();
+      }
+    }),
+);
+document.querySelectorAll("[data-difficulty]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      difficulty = b.dataset.difficulty;
+      document
+        .querySelectorAll("[data-difficulty]")
+        .forEach((x) => x.classList.toggle("selected", x === b));
+      setupWorld();
+    }),
+);
+$("#roster").onclick = roster;
+$("#return").onclick = returnWorld;
+$("#play").onclick = begin;
+$("#reset").onclick = () => {
+  mode === "roster"
+    ? window.rosterActors.forEach((a) => action(a, "idle"))
+    : setupWorld();
+};
+$("#animation").onchange = (e) =>
+  window.rosterActors.forEach((a) => action(a, e.target.value));
+$("#crowd").onclick = () => {
+  crowd = crowd === 2 ? 15 : 2;
+  $("#crowd").textContent = `${crowd} / 15 players`;
+  if (mode === "world") {
+    setupWorld();
+    toast(
+      crowd === 15
+        ? "15 animated characters · Local rendering stress preview"
+        : "Drag to orbit · Scroll to explore",
+    );
+  }
+};
+$("#quality").onclick = () => {
+  high = !high;
+  bloom.enabled = high;
+  renderer.setPixelRatio(high ? Math.min(devicePixelRatio, 1.5) : 1);
+  $("#quality").textContent = `Quality: ${high ? "High" : "Lite"}`;
+  resize();
+};
+addEventListener("keydown", (e) => {
+  if (e.target.matches("select,input,textarea")) return;
+  if (
+    ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
+      e.code,
+    )
+  )
+    e.preventDefault();
+  keys.add(e.code);
+  if (e.code === "Space" && !e.repeat) jumpRequested = true;
+  if (e.code === "KeyF" && !e.repeat) fire();
+});
+addEventListener("keyup", (e) => keys.delete(e.code));
+addEventListener("blur", () => keys.clear());
+function resize() {
+  const w = viewport.clientWidth,
+    h = viewport.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+}
+addEventListener("resize", resize);
+resize();
+let fpsFrames = 0,
+  fpsTime = 0;
+renderer.setAnimationLoop(() => {
+  const wallDt = clock.getDelta(),
+    dt = Math.min(wallDt, 0.05);
+  elapsed += dt;
+  effects?.update(elapsed);
+  lava.material.uniforms.time.value = elapsed;
+  for (const a of actors) {
+    a.mixer.update(dt);
+  }
+  for (const a of window.rosterActors || []) a.mixer.update(dt);
+  if (playing) updatePlayer(dt);
+  for (const h of hammers) {
+    h.angle =
+      Math.sin(elapsed * (difficulty === "hard" ? 2.5 : 1.6) + h.phase) * 0.78;
+    h.root.rotation.z = h.angle;
+    h.root.visible = !h.tile.gone;
+  }
+  for (const p of pickups) {
+    p.root.visible = !p.collected && !p.tile.gone;
+    p.root.position.y = p.tile.y + 0.4 + Math.sin(elapsed * 2 + p.tile.x) * 0.1;
+    p.root.rotation.y = elapsed * 0.5;
+  }
+  for (const c of cars)
+    c.position.x = ((c.position.x + dt * 2.5 + 24) % 48) - 24;
+  const sparks = worldRoot.getObjectByName("sparks");
+  if (sparks) {
+    sparks.position.y = (elapsed * 0.3) % 3;
+  }
+  for (const p of projectiles) {
+    p.mesh.position.addScaledVector(p.dir, dt * 18);
+    p.mesh.position.y -= dt * 1.8;
+    p.ttl -= dt;
+    for (const t of tiles)
+      if (
+        !t.gone &&
+        p.mesh.position.distanceTo(new T.Vector3(t.x, t.y, t.z)) < 1.5
+      ) {
+        trigger(t);
+        t.expires = Math.min(t.expires, elapsed + 0.15);
+        p.ttl = 0;
+      }
+  }
+  projectiles = projectiles.filter((p) => {
+    if (p.ttl > 0) return true;
+    scene.remove(p.mesh);
+    p.mesh.geometry.dispose();
+    return false;
+  });
+  updateTiles();
+  controls.update();
+  renderer.info.reset();
+  composer.render();
+  fpsFrames++;
+  fpsTime += wallDt;
+  if (fpsTime > 0.6) {
+    $("#performance").textContent =
+      `${Math.round(fpsFrames / fpsTime)} FPS · ${remaining} tiles · ${mode === "roster" ? 2 : crowd} characters`;
+    fpsTime = 0;
+    fpsFrames = 0;
+  }
+});
+window.dropStudio = {
+  get state() {
+    return {
+      world,
+      mode,
+      playing,
+      crowd,
+      difficulty,
+      tiles: tiles.length,
+      remaining,
+      playerPosition: player?.model.position.toArray(),
+      drawCalls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+    };
+  },
+  triggerTile(id) {
+    const t = tiles.find((t) => t.id === id);
+    if (t) trigger(t);
+  },
+  get tiles() {
+    return tiles;
+  },
+  get actors() {
+    return actors;
+  },
+  scene,
+  camera,
+  renderer,
+};
+init().catch((error) => {
+  console.error(error);
+  $("#loading").innerHTML =
+    "<p>Could not load the asset package. Check the console and run npm run assets.</p>";
+});

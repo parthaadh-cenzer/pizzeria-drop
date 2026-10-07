@@ -1,0 +1,53 @@
+{
+  "testedAt": "2026-10-07T02:01:51.660Z",
+  "environment": "Local Chrome headless, 1440x960; measurements are not a mobile/Staige performance guarantee.",
+  "results": [
+    {
+      "medianFrameMs": 5.5,
+      "p95FrameMs": 6,
+      "world": "volcano",
+      "mode": "world",
+      "playing": false,
+      "crowd": 15,
+      "difficulty": "medium",
+      "tiles": 125,
+      "remaining": 125,
+      "playerPosition": [
+        -4.7,
+        13.35,
+        -4.7
+      ],
+      "drawCalls": 139,
+      "triangles": 546006
+    },
+    {
+      "medianFrameMs": 5.5,
+      "p95FrameMs": 5.900000035762787,
+      "world": "cityscape",
+      "mode": "world",
+      "playing": false,
+      "crowd": 15,
+      "difficulty": "medium",
+      "tiles": 125,
+      "remaining": 125,
+      "playerPosition": [
+        -4.7,
+        13.35,
+        -4.7
+      ],
+      "drawCalls": 149,
+      "triangles": 567432
+    },
+    {
+      "countdown": "passed: tile present at 2.4s, then removed after 3s"
+    },
+    {
+      "localMovement": "passed",
+      "jump": "passed"
+    },
+    {
+      "animations": "all eight clips play on both models without binding or shader errors"
+    }
+  ],
+  "errors": []
+}

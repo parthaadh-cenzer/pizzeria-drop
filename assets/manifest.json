@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "characters": [
+    {
+      "path": "characters/girl.glb",
+      "bytes": 958304,
+      "triangles": 15850,
+      "animations": [
+        {
+          "name": "idle",
+          "duration": 16.616666793823242
+        },
+        {
+          "name": "run",
+          "duration": 0.5166666507720947
+        },
+        {
+          "name": "jump",
+          "duration": 1.8833333253860474
+        },
+        {
+          "name": "fall",
+          "duration": 4.5
+        },
+        {
+          "name": "recovery",
+          "duration": 8.583333015441895
+        },
+        {
+          "name": "dance",
+          "duration": 7.800000190734863
+        },
+        {
+          "name": "landing",
+          "duration": 0.38
+        },
+        {
+          "name": "hit",
+          "duration": 0.48
+        }
+      ]
+    },
+    {
+      "path": "characters/boy.glb",
+      "bytes": 913952,
+      "triangles": 14698,
+      "animations": [
+        {
+          "name": "idle",
+          "duration": 16.616666793823242
+        },
+        {
+          "name": "run",
+          "duration": 0.5166666507720947
+        },
+        {
+          "name": "jump",
+          "duration": 1.8833333253860474
+        },
+        {
+          "name": "fall",
+          "duration": 4.5
+        },
+        {
+          "name": "recovery",
+          "duration": 8.583333015441895
+        },
+        {
+          "name": "dance",
+          "duration": 7.800000190734863
+        },
+        {
+          "name": "landing",
+          "duration": 0.38
+        },
+        {
+          "name": "hit",
+          "duration": 0.48
+        }
+      ]
+    }
+  ],
+  "worlds": [
+    {
+      "path": "worlds/volcano.glb",
+      "bytes": 1024628,
+      "triangles": 11504,
+      "animations": [],
+      "layout": "worlds/volcano.layout.json",
+      "tiles": 363,
+      "assembled": "worlds/volcano-assembled.glb"
+    },
+    {
+      "path": "worlds/cityscape.glb",
+      "bytes": 1902192,
+      "triangles": 34640,
+      "animations": [],
+      "layout": "worlds/cityscape.layout.json",
+      "tiles": 363,
+      "assembled": "worlds/cityscape-assembled.glb"
+    }
+  ],
+  "props": [
+    {
+      "path": "props/volcano-normal.glb",
+      "bytes": 25912,
+      "triangles": 828,
+      "animations": []
+    },
+    {
+      "path": "props/volcano-unstable.glb",
+      "bytes": 28612,
+      "triangles": 852,
+      "animations": []
+    },
+    {
+      "path": "props/volcano-burst.glb",
+      "bytes": 42604,
+      "triangles": 1284,
+      "animations": []
+    },
+    {
+      "path": "props/cityscape-normal.glb",
+      "bytes": 25916,
+      "triangles": 828,
+      "animations": []
+    },
+    {
+      "path": "props/cityscape-unstable.glb",
+      "bytes": 28612,
+      "triangles": 852,
+      "animations": []
+    },
+    {
+      "path": "props/cityscape-burst.glb",
+      "bytes": 42608,
+      "triangles": 1284,
+      "animations": []
+    },
+    {
+      "path": "props/hammer.glb",
+      "bytes": 20652,
+      "triangles": 660,
+      "animations": []
+    },
+    {
+      "path": "props/rocket.glb",
+      "bytes": 23804,
+      "triangles": 688,
+      "animations": []
+    },
+    {
+      "path": "props/rocket-held.glb",
+      "bytes": 20196,
+      "triangles": 600,
+      "animations": []
+    }
+  ],
+  "animationSource": "Local supplied Mixamo FBX; baked world-space rest-pose retarget at 24 fps.",
+  "generatedAt": "2026-10-07T05:59:09.154Z"
+}

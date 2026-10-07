@@ -1,0 +1,74 @@
+{
+  "environment": "Local Chrome headless, desktop 1440x960 and actual Chromium touch events at 844x390; not a Staige or physical-phone certification.",
+  "checks": [
+    "real countdown → initial drop → first contact activates tile",
+    "desktop WASD / Space / E",
+    "camera descends with player and stays below overhead floor",
+    "contact auto-equip; visible handheld gun; reticle leave resets; real F hold/release locks and removes exactly four tiles",
+    "both mascots maintain both grip positions in all eight animation clips",
+    "15-character active simulations in both worlds",
+    "landscape simultaneous real touches: joystick + camera drag + held fire",
+    "landscape touch two-second lock and release fire",
+    "touch Jump and Dive",
+    "eliminated body renderer disappears"
+  ],
+  "performance": [
+    {
+      "world": "cityscape",
+      "mode": "world",
+      "playing": true,
+      "crowd": 15,
+      "difficulty": "hard",
+      "tiles": 363,
+      "remaining": 345,
+      "playerPosition": [
+        0,
+        19.549999999999997,
+        9.4
+      ],
+      "phase": "active",
+      "ammo": 0,
+      "lock": {
+        "holding": false,
+        "target": null,
+        "seconds": 0,
+        "locked": false
+      },
+      "gridSide": 11,
+      "drawCalls": 163,
+      "triangles": 883132,
+      "medianFrameMs": 5.599999964237213,
+      "p95FrameMs": 6.100000023841858,
+      "alive": 15
+    },
+    {
+      "world": "volcano",
+      "mode": "world",
+      "playing": true,
+      "crowd": 15,
+      "difficulty": "hard",
+      "tiles": 363,
+      "remaining": 345,
+      "playerPosition": [
+        0,
+        19.549999999999997,
+        9.4
+      ],
+      "phase": "active",
+      "ammo": 0,
+      "lock": {
+        "holding": false,
+        "target": null,
+        "seconds": 0,
+        "locked": false
+      },
+      "gridSide": 11,
+      "drawCalls": 149,
+      "triangles": 892794,
+      "medianFrameMs": 5.5,
+      "p95FrameMs": 6.300000011920929,
+      "alive": 15
+    }
+  ],
+  "errors": []
+}

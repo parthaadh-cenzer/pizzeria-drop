@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+*.log
+
+# Packaged archives (rebuild from source)
+*.zip
+
+# Original Mixamo source FBXs: not redistributable and too large for git.
+# Restore locally before running `npm run assets`.
+assets/Girl 1/
+assets/Guy 1/
+*.fbx
+# Textures extracted from the source FBXs
+assets/reports/*-source-texture-*.png
+
+# Local/editor/machine state
+.env
+.env.*
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pizzeria Drop · World studio</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <aside>
+      <a class="brand" href="/" aria-label="Pizzeria Drop home"
+        ><span class="brand-icon">◒</span
+        ><span
+          >PIZZERIA<br /><b>DROP<span class="dot">.</span></b></span
+        ></a
+      >
+      <div class="edition">WORLD STUDIO <span>01 / ART FOUNDATION</span></div>
+      <h1>A little chaos.<br />A long way down.</h1>
+      <p class="intro">Two worlds. One last slice of survival.</p>
+      <div class="section-label">01 <span>CHOOSE YOUR WORLD</span></div>
+      <button class="world active" data-world="volcano">
+        <span class="world-icon volcano">▲</span
+        ><span
+          ><strong>Molten Crater</strong
+          ><small>VOLCANO · THE ORIGINAL DROP</small></span
+        ><span class="arrow">↗</span>
+      </button>
+      <button class="world" data-world="cityscape">
+        <span class="world-icon city">▥</span
+        ><span
+          ><strong>Skyline Collapse</strong
+          ><small>CITYSCAPE · AFTER HOURS</small></span
+        ><span class="arrow">↗</span>
+      </button>
+      <div class="section-label">02 <span>MEET YOUR STARTERS</span></div>
+      <div class="characters">
+        <button class="char selected" data-character="girl">
+          <i class="swatch red"></i><strong>Girl</strong
+          ><small>RED HOODIE</small></button
+        ><button class="char" data-character="boy">
+          <i class="swatch blue"></i><strong>Boy</strong
+          ><small>BLUE JACKET</small>
+        </button>
+      </div>
+      <button id="roster" class="text-button">
+        Inspect characters & animations <span>↗</span>
+      </button>
+      <div class="section-label">03 <span>SET THE PACE</span></div>
+      <div class="segmented" id="difficulty">
+        <button class="selected" data-difficulty="easy">Easy</button
+        ><button data-difficulty="medium">Medium</button
+        ><button data-difficulty="hard">Hard</button>
+      </div>
+      <button id="play" class="primary">Take the drop <span>↗</span></button>
+      <p class="local-note">WASD · SPACE JUMP · E DIVE · HOLD LMB TO LOCK<button id="controls-open-studio" class="controls-link" type="button">? Controls</button></p>
+      <div class="sidebar-bottom">
+        <span class="status-light"></span> BUILT TO FALL. MADE TO STAND OUT.
+      </div>
+    </aside>
+    <main>
+      <div id="viewport"></div>
+      <header>
+        <div class="live"><span></span> LIVE 3D PREVIEW</div>
+        <div class="toolbar">
+          <button id="crowd">2 / 15 players</button
+          ><button id="quality" title="Toggle bloom and pixel density">
+            Quality: High</button
+          ><button id="reset" title="Reset arena">↻ Reset</button>
+        </div>
+      </header>
+      <div class="world-heading">
+        <div class="eyebrow" id="biome-label">WORLD 01 / VOLCANO</div>
+        <h2 id="world-title">Molten Crater<span>™</span></h2>
+        <p id="world-description">Warm hearts. Unstable ground.</p>
+      </div>
+      <div id="animation-panel" hidden>
+        <label for="animation">SHARED ANIMATION LIBRARY</label
+        ><select id="animation">
+          <option>idle</option>
+          <option>run</option>
+          <option>jump</option>
+          <option>fall</option>
+          <option>landing</option>
+          <option>recovery</option>
+          <option>hit</option>
+          <option>dance</option></select
+        ><button id="roster-weapon">Hold launcher</button><button id="return">← Back to arena</button>
+      </div>
+      <div class="toast" id="toast">Drag to orbit · Scroll to explore</div>
+      <footer>
+        <div>
+          <span class="metric-number">03</span
+          ><span class="metric-label">STACKED<br />LEVELS</span>
+        </div>
+        <div>
+          <span class="metric-number">3s</span
+          ><span class="metric-label">UNTIL THE<br />TILE DROPS</span>
+        </div>
+        <div>
+          <span class="metric-number">15</span
+          ><span class="metric-label">PLAYER<br />CAPACITY</span>
+        </div>
+        <div class="legend">
+          <span><i class="safe"></i>STONE</span
+          ><span><i class="danger"></i>UNSTABLE</span
+          ><span><i class="launch"></i>LAUNCH</span>
+        </div>
+        <span id="performance">Preparing assets…</span>
+      </footer>
+      <div id="loading">
+        <span class="loading-logo">PD.</span>
+        <p>Warming up the world…</p>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
