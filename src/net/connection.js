@@ -8,6 +8,70 @@ export function serverUrl() {
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.href;
 }
+
+// The hosted game server may be asleep (free tier: ~20–35 s to wake). Opening a socket retries with backoff for
+// WAKE_WINDOW_MS instead of failing on the first attempt; after WAKING_AFTER_MS the UI says "Waking up game server…".
+export const WAKE_WINDOW_MS = 45_000;
+export const WAKING_AFTER_MS = 3_000;
+const BACKOFF_MS = [1000, 2000, 3000, 5000];
+const ATTEMPT_TIMEOUT_MS = 8000;
+
+/** HTTP URL of the server's /health (wakes a sleeping instance). */
+export function healthUrl(ws = serverUrl()) {
+  const u = new URL(ws);
+  u.protocol = u.protocol === "wss:" ? "https:" : "http:";
+  u.pathname = u.pathname.replace(/\/?ws$/, "") + "/health";
+  u.pathname = u.pathname.replace(/\/{2,}/g, "/");
+  return u.href;
+}
+
+/**
+ * Open a WebSocket, retrying with backoff while a sleeping server wakes. `onPhase("connecting" | "waking")`.
+ * Resolves with the open socket; rejects with "timeout" only after the whole wake window.
+ */
+export async function openWithWake(url, onPhase = () => {}, windowMs = WAKE_WINDOW_MS) {
+  const start = performance.now();
+  const elapsed = () => performance.now() - start;
+  onPhase("connecting");
+  const wakingTimer = setTimeout(() => onPhase("waking"), WAKING_AFTER_MS);
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await new Promise((resolve, reject) => {
+          const ws = new WebSocket(url);
+          const t = setTimeout(() => { ws.onopen = ws.onerror = null; try { ws.close(); } catch {} reject(new Error("timeout")); }, Math.min(ATTEMPT_TIMEOUT_MS, Math.max(1000, windowMs - elapsed())));
+          ws.onopen = () => { clearTimeout(t); resolve(ws); };
+          ws.onerror = () => { clearTimeout(t); reject(new Error("timeout")); };
+        });
+      } catch {
+        const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
+        if (elapsed() + wait >= windowMs) throw new Error("timeout");
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+  } finally {
+    clearTimeout(wakingTimer);
+  }
+}
+
+/**
+ * One background wake sequence when the menu opens: ping /health (starts a sleeping instance) and confirm with a
+ * WebSocket handshake. `onState("waking" | "ready" | "unavailable")`. Runs once — no permanent polling, so the
+ * server can still sleep when nobody is playing.
+ */
+let wakePromise = null;
+export function wakeServer(onState = () => {}) {
+  if (!wakePromise) {
+    fetch(healthUrl(), { mode: "no-cors", cache: "no-store" }).catch(() => {});
+    wakePromise = openWithWake(serverUrl(), (p) => p === "waking" && onState("waking"), 60_000).then(
+      (ws) => { try { ws.close(); } catch {} return "ready"; },
+      () => "unavailable",
+    );
+  }
+  wakePromise.then((s) => onState(s));
+  return wakePromise;
+}
+
 const SESSION_KEY = "pizzeria-drop-session";
 export const savedSession = () => {
   try {
@@ -123,10 +187,11 @@ export class Connection extends EventTarget {
     this.setStatus("connected");
   }
   // Request/response helper: resolves on welcome, rejects with a readable error code.
+  // First connection waits for a sleeping server to wake (phase events: "connecting" → "waking").
   request(message, timeoutMs = 8000) {
     return new Promise(async (resolve, reject) => {
       try {
-        if (!this.ws) await this.open(timeoutMs);
+        if (!this.ws) this.attach(await openWithWake(this.url, (p) => this.emitEvent("phase", p)));
       } catch {
         return reject(new Error("timeout"));
       }

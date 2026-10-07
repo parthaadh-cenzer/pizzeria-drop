@@ -11,7 +11,7 @@ import {
   joinUrl,
   CODE_LENGTH,
 } from "../net/protocol.js";
-import { Connection, errorText, savedSession } from "../net/connection.js";
+import { Connection, errorText, savedSession, wakeServer } from "../net/connection.js";
 import { BOT_NAMES } from "../gameplay.js";
 import { ICONS } from "./icons.js";
 
@@ -60,6 +60,16 @@ export function createMenu(game) {
       $(b).value = $(a).value;
       $(a).classList.remove("invalid");
     });
+  // Wake the (possibly sleeping) game server while the player is still on the menu — one sequence, no polling.
+  const SERVER_LABEL = { waking: "Waking server…", ready: "Server ready", unavailable: "Server unavailable" };
+  const setServerState = (s) => {
+    const el = $("#server-status");
+    el.dataset.state = s;
+    el.textContent = SERVER_LABEL[s] || "";
+  };
+  setServerState("waking");
+  wakeServer(setServerState);
+
   const params = new URLSearchParams(location.search);
   if (params.get("room")) $("#join-code").value = normalizeCode(params.get("room"));
 
@@ -97,6 +107,11 @@ export function createMenu(game) {
   function connection() {
     if (state.connection) return state.connection;
     const c = new Connection();
+    // A sleeping server is waking: say so instead of failing, and keep going automatically once it answers.
+    c.addEventListener("phase", (e) => {
+      if (e.detail === "waking" && state.screen === "busy") $("#busy-text").textContent = "Waking up game server…";
+    });
+    c.addEventListener("status", (e) => e.detail === "connected" && setServerState("ready"));
     c.addEventListener("lobby", (e) => {
       state.lobby = e.detail.lobby;
       // Host edits are optimistic; ignore echoes older than our latest settings revision.
@@ -449,7 +464,7 @@ const MARKUP = `
     <button id="btn-join" class="btn">${ICONS.join}<span>JOIN GAME</span></button>
     <button id="btn-quick" class="btn ghost">${ICONS.bolt}<span>QUICK PLAY <small>with bots</small></span></button>
   </div>
-  <div class="menu-foot"><button id="menu-controls" class="chip">${ICONS.help} Controls</button><button id="menu-fullscreen" class="chip">${ICONS.fullscreen} Full screen</button><span id="build-version" class="build-version" title="Build">v${__BUILD__.version} · ${__BUILD__.commit}</span></div>
+  <div class="menu-foot"><button id="menu-controls" class="chip">${ICONS.help} Controls</button><button id="menu-fullscreen" class="chip">${ICONS.fullscreen} Full screen</button><span id="server-status" class="server-status" role="status" aria-live="polite"></span><span id="build-version" class="build-version" title="Build">v${__BUILD__.version} · ${__BUILD__.commit}</span></div>
 </section>
 <section class="menu-screen screen-join" aria-label="Join game">
   <div class="menu-card">

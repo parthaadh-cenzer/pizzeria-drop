@@ -18,6 +18,8 @@ assets/reports/*-source-texture-*.png
 # Local/editor/machine state
 .env
 .env.*
+# Public client build config (no secrets) — committed on purpose.
+!.env.production
 .claude/
 .vscode/
 .idea/

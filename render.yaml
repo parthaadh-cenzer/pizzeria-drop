@@ -1,0 +1,25 @@
+# Render Blueprint: Pizzeria Drop's authoritative realtime server (rooms, 60 Hz simulation, bots) for the
+# STAIGE-hosted client — same pattern as Pizzeria Roadrash / Conquest of Pizzeria.
+#   client  : STAIGE games CDN (built with VITE_GAME_SERVER_URL from .env.production)
+#   server  : this service — `npm start` (server/index.js) on $PORT, 0.0.0.0, GET /health, WebSocket /ws
+# Rooms live in memory: keep exactly ONE instance. A restart/redeploy ends active rooms.
+# Free instances sleep after ~15 idle minutes (no requests / WebSocket traffic) and take ~20–35 s to wake;
+# the client wakes the server when the menu opens and retries for up to 45 s on Host/Join.
+services:
+  - type: web
+    name: pizzeria-drop-server
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    numInstances: 1
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      # Browser origins allowed to open the WebSocket (the STAIGE player iframe + direct visits).
+      - key: ALLOWED_ORIGINS
+        value: https://play.games.staige.world,https://games.staige.world

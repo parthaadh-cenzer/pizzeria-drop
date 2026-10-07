@@ -227,6 +227,30 @@ body:not(.studio) main {
   color: #8a8fa3;
   letter-spacing: 0.5px;
 }
+/* Tiny game-server indicator (wakes a sleeping free-tier server in the background). */
+.server-status {
+  align-self: center;
+  font-size: 11px;
+  color: #8a8fa3;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.server-status::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  vertical-align: 0;
+}
+.server-status[data-state="waking"]::before { animation: server-pulse 1.2s ease-in-out infinite; }
+.server-status[data-state="ready"] { color: #7fe3a0; }
+.server-status[data-state="ready"]::before { background: currentColor; }
+.server-status[data-state="unavailable"] { color: #ff8a8a; }
+@keyframes server-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .server-status[data-state="waking"]::before { animation: none; } }
 .menu-error {
   position: fixed;
   left: 50%;
