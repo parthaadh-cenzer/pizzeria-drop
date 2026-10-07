@@ -1,6 +1,6 @@
 # Project Identity
 
-Pizzeria Drop is an original stylized vertical tile-survival prototype and asset studio, built with Three.js/Vite for eventual Staige integration. This Brain records explicit procedures and observed outcomes, not private reasoning. Updated October 7, 2026 (rocket aiming/controls completion pass). See HANDOFF for current paths/status.
+Pizzeria Drop is an original stylized vertical tile-survival prototype and asset studio, built with Three.js/Vite for eventual Staige integration. This Brain records explicit procedures and observed outcomes, not private reasoning. Updated October 7, 2026 (instant lock + winner flow pass). See HANDOFF for current paths/status.
 
 # Goals
 
@@ -8,7 +8,7 @@ Cute recognizable mascots, intentional worlds, clear shared-tile rules, momentum
 
 # Locked Product Decisions
 
-PROJECT-SPECIFIC: Three square floors; constant tile size; grid side 7/9/11 by population; levels 19.4/11.8/4.2; gravity 22; jump apex 8.25; collapse 3 seconds; lock 2 seconds; two shots per launcher; initial launcher instances equal actor count; launcher auto-equips on touch; hold to aim, 2-second uninterrupted lock, release fires only when locked; rockets fly in 3D with homing, are blocked by intact floors and pass through gaps; rocket affects at most a compact 2x2 with zero HP damage; kill-zone elimination followed by 0.75-second body removal. Easy full floors; Medium interior gaps/hammers; Hard adds gaps/bursts. Starting perimeter remains intact. A normal jump passes upward through one-way platforms and reaches one floor, not two.
+PROJECT-SPECIFIC: Three square floors; constant tile size; grid side 7/9/11 by population; levels 19.4/11.8/4.2; gravity 22; jump apex 8.25; collapse 3 seconds; instant lock (0 s, 0.25 s grace); two shots per launcher; initial launcher instances equal actor count; launcher auto-equips on touch; hold to aim, a valid target in the reticle locks instantly, release fires only when locked; rockets fly in 3D with homing, are blocked by intact floors and pass through gaps; rocket affects at most a compact 2x2 with zero HP damage; kill-zone elimination followed by 0.75-second body removal; the last living player wins automatically and the match freezes; the winner's entered name is shown with a crown; Play Again fully rebuilds the match. Easy full floors; Medium interior gaps/hammers; Hard adds gaps/bursts. Starting perimeter remains intact. A normal jump passes upward through one-way platforms and reaches one floor, not two.
 
 # Art Direction
 
@@ -86,7 +86,7 @@ GENERALIZABLE workflow: vertical-arena follow camera.
 
 # Rocket Targeting System
 
-PROJECT-SPECIFIC summary: hold → aim camera + reticle → 2 s uninterrupted lock on one living player → release fires a homing rocket → the rocket breaks at most a 2x2 of the floor where it lands. Lock is screen-space; flight obeys floor line of sight. Unlocked release keeps ammo. Constants live in `RULES` (`src/gameplay.js`): speed 24 m/s, turn 3.4 rad/s, terminal turn 9 rad/s, terminal range 2.2 m, ttl 5 s, slab top +0.15, underside −0.5. The workflows below give the full procedures.
+PROJECT-SPECIFIC summary: hold → aim camera + reticle → a living player inside the reticle cone locks instantly (`RULES.lockSeconds = 0`), with a 0.25 s grace before a lost lock drops → release fires a homing rocket → the rocket breaks at most a 2x2 of the floor where it lands. Releasing with no lock keeps ammo. The 2-second lock was removed because it felt too slow; the per-step lock structure (target, seconds, locked, grace) was kept, so a non-zero lock time is still one constant away. Lock is screen-space; flight obeys floor line of sight. Rocket constants are in `RULES` (`src/gameplay.js`): speed 24 m/s, turn 3.4 rad/s, terminal turn 9 rad/s, terminal range 2.2 m, ttl 5 s, slab top +0.15, underside −0.5. The workflows below give the full procedures.
 
 # Third-Person Camera-Relative Weapon Aiming
 
@@ -159,8 +159,8 @@ GENERALIZABLE workflow.
 - PURPOSE: make thumb aiming viable without auto-targeting.
 - WHEN TO USE: touch lock-on/aim games.
 - INPUTS: last pointer type, per-device profile {lock cone px, assist radius px, strength}, range limit.
-- STEP-BY-STEP PROCEDURE: (1) select the profile by last pointer type (mouse 56/72/1.3, touch 84/120/3.4); (2) consider only living, on-screen, in-range targets; (3) prefer the current lock target, else the nearest within the assist radius; (4) compute the yaw/pitch error from camera forward to the target; (5) apply k = 1 − exp(−strength·dt) of the error; (6) do nothing when no target is near the reticle.
-- OUTPUT: a gentle pull that helps hold a 2-second lock.
+- STEP-BY-STEP PROCEDURE: (1) select the profile by last pointer type (current values: mouse lock 56 px / assist 72 px / strength 1.0; touch 76 / 104 / 2.2; with instant lock, assist must stay light because acquisition is already immediate); (2) consider only living, on-screen, in-range targets; (3) prefer the current lock target, else the nearest within the assist radius; (4) compute the yaw/pitch error from camera forward to the target; (5) apply k = 1 − exp(−strength·dt) of the error; (6) do nothing when no target is near the reticle.
+- OUTPUT: a gentle pull that helps put and keep a nearby target inside the instant-lock cone.
 - VALIDATION / TEST: a touch run locks up and down with real drags; the profile is "touch" on mobile; a target leaving the cone still resets the lock.
 - COMMON FAILURE MODES: assist selecting off-screen enemies; snapping (k too high); assist holding onto a target that left the cone.
 - PERFORMANCE CONSIDERATIONS: one projection per candidate per frame.
@@ -172,7 +172,7 @@ GENERALIZABLE workflow.
 - PURPOSE: new players discover controls without permanent clutter.
 - WHEN TO USE: any game with non-obvious inputs.
 - INPUTS: device class (pointer: coarse), persistent "seen" flag, game pause hook, event stream.
-- STEP-BY-STEP PROCEDURE: (1) before the first match, show a compact panel listing every input, device-appropriate list first; (2) pause the countdown until dismissed and store the seen flag in localStorage inside try/catch; (3) add a persistent "? Controls" button and a hotkey; reopening pauses the match; Escape closes; (4) show contextual hints on first relevant events (e.g. "ROCKET EQUIPPED · Hold · 2 s · Release"): long the first time, short later, hidden once the player succeeds; (5) give immediate feedback for wrong actions ("NOT LOCKED"); (6) check short landscape layouts so the confirm button is visible.
+- STEP-BY-STEP PROCEDURE: (1) before the first match, show a compact panel listing every input, device-appropriate list first; (2) pause the countdown until dismissed and store the seen flag in localStorage inside try/catch; (3) add a persistent "? Controls" button and a hotkey; reopening pauses the match; Escape closes; (4) show contextual hints on first relevant events (e.g. "ROCKET EQUIPPED · Hold to aim · Aim at a player to lock · Release to fire"): long the first time, short later, hidden once the player succeeds; (5) give immediate feedback for wrong actions ("NOT LOCKED"); (6) check short landscape layouts so the confirm button is visible.
 - OUTPUT: discoverable controls with zero permanent coverage.
 - VALIDATION / TEST: a fresh profile sees the panel; the countdown waits; the button reopens it; touch hides the desktop list; the button is in the viewport at 844x390.
 - COMMON FAILURE MODES: the panel blocking automation (tests must dismiss it or preseed the flag); confirm button below the fold; hints never dismissed.
@@ -191,6 +191,71 @@ GENERALIZABLE workflow.
 - COMMON FAILURE MODES: per-shot mesh creation; transparent overdraw from large smoke; measuring a throttled/hidden page.
 - PERFORMANCE CONSIDERATIONS: one instanced trail draw call regardless of rocket count.
 - GENERALIZABLE LESSON: pool and instance first, then measure in a visible, unthrottled context.
+
+# Last-Player-Standing Resolution
+
+GENERALIZABLE workflow (multiplayer elimination games).
+- PURPOSE: decide the match exactly once, deterministically, from simulation state.
+- WHEN TO USE: battle-royale / party games with elimination.
+- INPUTS: per-player alive flag, elimination order, phase, minimum player count.
+- STEP-BY-STEP PROCEDURE: (1) record each elimination in order; (2) at the END of every active step (after movement, hazards and projectiles) count living players; (3) if ≤ 1 and the match had ≥ 2 players, resolve; (4) winner = the single survivor, or a draw when the final players fall in the same step; (5) build a serializable result (winner id/name, draw, placements = winner + reverse elimination order, duration) and emit one event; (6) make resolve idempotent by gating on phase.
+- OUTPUT: a single authoritative result object usable by UI, analytics or a server.
+- VALIDATION / TEST: 2-player and 3-player eliminations; bot winner; simultaneous final eliminations → draw; placements order; single winner event.
+- COMMON FAILURE MODES: checking inside the per-player loop (resolves before a simultaneous elimination is applied); resolving in rendering code; solo/preview matches resolving instantly.
+- PERFORMANCE CONSIDERATIONS: O(players) per step.
+- GENERALIZABLE LESSON: resolution is a rule outcome; it belongs in the authoritative simulation and must be server-owned when networked.
+
+# Winner-State Transition
+
+GENERALIZABLE workflow.
+- PURPOSE: end the match cleanly and protect the winner.
+- WHEN TO USE: after resolution in any physics/hazard game.
+- INPUTS: phase machine (preview → countdown → active → won), hazard systems, input gate.
+- STEP-BY-STEP PROCEDURE: (1) switch phase to `won` and timestamp it; (2) clear in-flight projectiles and cancel held actions; (3) secure the winner: snap to its footing, or the nearest intact surface if airborne, zero velocity, set grounded and a celebration animation; (4) in `won` step, run only cosmetic bookkeeping (e.g. eliminated-body removal); freeze tile timers, hammers, pickups, movement and kill checks; (5) reject action methods unless the phase is active; (6) disable the input layer and reset held keys/pointers; (7) presentation layers react to the phase/event, never the reverse; (8) end the presentation if the phase changes away (debug/fixture safety).
+- OUTPUT: a stable final scene in which the winner cannot die.
+- VALIDATION / TEST: move the winner into the kill zone after resolution and confirm alive; set tile expiries in the past and confirm none break; hammers don't move; jump/dive/fire rejected.
+- COMMON FAILURE MODES: hazards still ticking (winner falls during the celebration); airborne winner frozen mid-air; input still driving the camera.
+- PERFORMANCE CONSIDERATIONS: the frozen step is cheaper than an active one.
+- GENERALIZABLE LESSON: freezing by phase is simpler and safer than special-casing each hazard for the winner.
+
+# Deterministic Match Reset
+
+GENERALIZABLE workflow.
+- PURPOSE: Play Again with zero stale state.
+- WHEN TO USE: any rematch/restart.
+- INPUTS: a pure match constructor, a world builder, presentation pools.
+- STEP-BY-STEP PROCEDURE: (1) never "undo" a finished match; construct a fresh Match (players, tiles, launchers, hammers, events, winner, result, eliminations); (2) rebuild scene-bound visuals (actors, tile instances, pickups) from it; (3) reset pooled presentation (rocket FX, winner FX: detach the crown, clear confetti) and remove state CSS classes/overlays; (4) reset HUD caches (nameplates, event cursor) and the camera; (5) keep only deliberate persistent settings (name, world, difficulty, count, onboarding-seen flag); (6) route Play Again through one function (`requestRematch`) so a network layer can replace it.
+- OUTPUT: a match indistinguishable from a first launch, except for persisted settings.
+- VALIDATION / TEST: after a win, Play Again → assert phase countdown, winner/result null, all alive, tiles intact/unactivated, launchers resting, ammo 0, crown detached, VFX inactive, overlays hidden, camera near the player, floor tracker correct, zero winner events; repeat with a bot winner.
+- COMMON FAILURE MODES: a crown left parented to an old skeleton; an event cursor skipping new events because time restarted; overlays remaining; pooled particles still alive.
+- PERFORMANCE CONSIDERATIONS: pools are reused across matches; only per-match geometry is rebuilt.
+- GENERALIZABLE LESSON: rebuild from a pure constructor and enumerate every presentation pool in a single reset path.
+
+# Lightweight Browser Victory Presentation
+
+GENERALIZABLE workflow.
+- PURPOSE: a satisfying 3–4 s win moment at negligible cost.
+- WHEN TO USE: browser/mobile multiplayer games.
+- INPUTS: result event, winner actor, existing animation clips, pooled VFX, CSS overlay.
+- STEP-BY-STEP PROCEDURE: (1) brief slow motion on visuals only (mixer dt × 0.3 → 1 over ~0.9 s) while the simulation stays frozen; (2) camera eases into a slow orbit framing the winner's head from the side it was already on (no cut), using the same cavity/ceiling clamps as gameplay; (3) the winner turns toward the camera (damped angle) and plays an existing upbeat clip plus procedural decaying hops; (4) pop an attachment (crown) with overshoot scale; (5) confetti burst from an instanced pool (~96) plus a second smaller burst on the pop; orbiting additive sparkles (~24) fading out; (6) CSS vignette glow and a big name banner; short WebAudio fanfare; (7) hide gameplay HUD (reticle, weapon, touch controls); (8) after ~3.2 s show a results card with primary/secondary actions focused for keyboard use; (9) verify the card fits short landscape screens.
+- OUTPUT: celebration with ~5 extra draw calls for a few seconds.
+- VALIDATION / TEST: screenshots mid-celebration and on the results card (after its fade-in) on desktop and 844x390; check name, crown and buttons on screen.
+- COMMON FAILURE MODES: camera too close (head hides crown); leftover countdown text ("DROP!"); screenshots captured mid-fade; test mutations (moving the winner) leaking into visuals.
+- PERFORMANCE CONSIDERATIONS: instanced confetti/sparkles, no per-frame allocation, effects idle when inactive.
+- GENERALIZABLE LESSON: reuse rig clips plus procedural motion and pooled particles instead of sourcing new animation assets.
+
+# Contextual Character Attachments (Crowns, Hats, Badges)
+
+GENERALIZABLE workflow.
+- PURPOSE: show state-dependent accessories without modifying character assets.
+- WHEN TO USE: winners, team markers, power-ups.
+- INPUTS: a named bone (here `Head`), a small procedural or GLB accessory, bone-space offset.
+- STEP-BY-STEP PROCEDURE: (1) build the accessory once and bake it into a few vertex-colored meshes; (2) read the bone-space head extents from the character generator to pick an offset (crown at y 0.82, slight tilt); (3) on activation, re-parent the single instance to the target actor's bone so it follows every animation; (4) animate only local transforms (pop, bob); (5) on reset, `removeFromParent()` and hide; (6) assert in tests that the parent bone belongs to the expected actor and that the world position is above the head.
+- OUTPUT: an accessory that tracks animation, applies to any character on the shared rig, and never ships in the base model.
+- VALIDATION / TEST: crown on the local winner and on a bot winner (correct actor); detached after rematch; visual check of fit across both mascots.
+- COMMON FAILURE MODES: adding to the model root (doesn't follow head motion); cloning per match (leaks); leaving it parented to a discarded skeleton; scale mismatch from unexpected bone scale.
+- PERFORMANCE CONSIDERATIONS: one shared instance, ~3 draw calls, only while visible.
+- GENERALIZABLE LESSON: semantic bone names make accessories portable; keep them out of exported character files.
 
 # Desktop Controls
 
@@ -264,7 +329,7 @@ GENERALIZABLE workflow: prove rules, exports and interaction separately.
 - WHEN TO USE: any playable visual prototype.
 - INPUTS: locked requirements, pure state API, asset manifest, local server, Chrome/Playwright.
 - STEP-BY-STEP PROCEDURE: (1) translate each rule into assertion; (2) test pure simulation edge cases; (3) validate exported formats and semantic nodes; (4) run browser from real initial countdown; (5) drive desktop keys and CDP multi-touch; (6) use explicit reproducible fixtures for aiming; (7) capture frames and inspect them; (8) repeat against production bundle.
-- OUTPUT: 21 simulation tests, 15-GLB report, two browser acceptance JSON/screenshot sets (regression + rocket with real mouse/touch input).
+- OUTPUT: 27 simulation tests, 15-GLB report, three browser acceptance JSON/screenshot sets (regression, rocket and winner flow with real mouse/touch input).
 - VALIDATION / TEST: no console/page errors; numeric grip/camera/tile assertions; inspect aim framing and world depth. Label fixtures and hardware limits.
 - COMMON FAILURE MODES: old tests hard-code obsolete 125-cell layouts, testing activate directly but missing spawn contact, fake pointer events, claiming physical-phone performance from desktop emulation.
 - PERFORMANCE CONSIDERATIONS: run broad suite after meaningful changes, not endlessly without new risk.
@@ -293,14 +358,17 @@ GENERALIZABLE: PURPOSE: identify real runtime cost. WHEN: maximum population/haz
 11. CDP Input.dispatchTouchEvent touchEnd removes the points that are absent from its list; misusing it released FIRE mid-aim in tests.
 12. A hidden in-app browser pane throttles requestAnimationFrame to zero. Use headless Chrome for simulation-timed acceptance.
 13. A first-run modal broke existing automation until tests preseeded the seen flag.
+14. Instant lock changed the meaning of older assertions: "holding fire never spends ammo within 0.4 s" and "lock resets 100 ms after leaving" both had to become "fired or cancelled exactly once" and "resets after grace". Re-derive assertions from the new rule instead of loosening them blindly.
+15. Winner resolution froze a falling-launcher unit test whose fixture parked every player off-arena; single-player fixtures avoid accidental resolution in unrelated tests.
+16. The first celebration camera was too close (the head hid the crown) and the countdown "DROP!" text persisted into the win screen; both were found only by inspecting screenshots.
 
 # Anti-Patterns
 
-Do not rebuild a working pipeline unnecessarily. Do not equate 15 local actors with networking. Do not silently claim Staige/mobile certification. Do not implement rocket HP damage when terrain disruption is the rule. Do not reset shared tile deadlines per actor. Do not leave pickups unsupported in midair. Do not expand a 2x2 footprint to find four surviving tiles. Do not let projectiles pass through intact floors. Do not let aim assist choose off-screen targets. Do not fire on release without a completed lock when release also ends a camera drag. Do not implement hammer elimination as a random scripted event. Do not optimize away customization or expressive silhouette without measuring benefit.
+Do not rebuild a working pipeline unnecessarily. Do not equate 15 local actors with networking. Do not silently claim Staige/mobile certification. Do not implement rocket HP damage when terrain disruption is the rule. Do not reset shared tile deadlines per actor. Do not leave pickups unsupported in midair. Do not expand a 2x2 footprint to find four surviving tiles. Do not let projectiles pass through intact floors. Do not let aim assist choose off-screen targets. Do not fire on release without a completed lock when release also ends a camera drag. Do not decide winners in presentation code. Do not keep hazards running after resolution. Do not reset a match by mutating the old one. Do not implement hammer elimination as a random scripted event. Do not optimize away customization or expressive silhouette without measuring benefit.
 
 # Reusable Skills
 
-Workflow catalog above: modular mascot/attachment authoring; third-person camera-relative aiming; vertical targeting; homing steering; analytic cross-floor LOS; auto-equip/ammo; mobile aim assist; contextual onboarding; browser-game optimization; environment composition around locked topology; custom fixed-step platform physics; vertical camera design; conserved equipment lifecycle; multi-pointer mobile input; world-rest-pose retargeting; semantic-preserving GLB optimization; bounded atmospheric VFX; gameplay-oriented lighting; layered acceptance; contextual performance measurement. Each workflow states inputs, procedure, output, verification and limitations. Network authority is explicitly proposed future work, not demonstrated skill execution in this build.
+Workflow catalog above: modular mascot/attachment authoring; third-person camera-relative aiming; vertical targeting; homing steering; analytic cross-floor LOS; auto-equip/ammo; mobile aim assist; contextual onboarding; browser-game optimization; last-player-standing resolution; winner-state transition; deterministic match reset; lightweight victory presentation; contextual character attachments; environment composition around locked topology; custom fixed-step platform physics; vertical camera design; conserved equipment lifecycle; multi-pointer mobile input; world-rest-pose retargeting; semantic-preserving GLB optimization; bounded atmospheric VFX; gameplay-oriented lighting; layered acceptance; contextual performance measurement. Each workflow states inputs, procedure, output, verification and limitations. Network authority is explicitly proposed future work, not demonstrated skill execution in this build.
 
 # Tools / Libraries / Techniques Used
 

@@ -1,89 +1,114 @@
 # Pizzeria Drop — handoff
 
-Updated October 7, 2026 (rocket aiming / controls completion pass). Project root: `G:/pizseria drop`. Local Three.js/Vite game and asset studio. **Not deployed to Staige. No multiplayer transport or backend.** Public repository: see "Deployment / repository status" below.
+Updated October 7, 2026 (instant lock + winner flow pass). Project root: `G:/pizseria drop`. Local Three.js/Vite game and asset studio. Public repo: https://github.com/parthaadh-cenzer/pizzeria-drop (branch `main`). **Not deployed to Staige. No multiplayer transport or backend.**
 
 ## Final control map
 
 | Action | Desktop | Mobile (landscape) |
 | --- | --- | --- |
 | Move | WASD / arrows (camera-relative) | Left joystick |
-| Camera / aim | Mouse drag (any button), yaw + pitch | Drag right side of screen, yaw + pitch; the thumb holding FIRE can also drag |
+| Camera / aim | Mouse drag (any button), yaw + pitch | Drag right side of the screen; the thumb holding FIRE can also drag |
 | Jump | SPACE | JUMP button |
 | Dive | E | DIVE button |
-| Aim / lock | Hold left mouse (F also works) | Hold FIRE |
-| Fire | Release left mouse (only when LOCKED) | Release FIRE (only when LOCKED) |
-| Controls help | `?` key or "? Controls" button (match banner and studio sidebar) | "? Controls" button |
+| Aim (instant lock) | Hold left mouse (F also works) | Hold FIRE |
+| Fire | Release left mouse while locked | Release FIRE while locked |
+| Controls help | `?` key or "? Controls" button | "? Controls" button |
 
-Releasing before the lock completes does not fire and keeps ammo. The HUD flashes "NOT LOCKED — HOLD 2s ON A TARGET". This prevents the drag-to-look gesture from wasting shots. To allow unguided shots instead, change `releaseFire` in `src/gameplay.js`.
+Releasing with no lock does not fire and keeps ammo. The HUD flashes "NOT LOCKED — AIM AT A PLAYER, THEN RELEASE".
 
-## Rocket implementation (this pass)
+## Instant rocket lock (decision)
 
-- **Pickup/ammo:** touching a launcher auto-equips it (2 shots). The held model is visible via hand IK. HUD shows `ROCKETS: 2` → `ROCKETS: 1`. After the final shot the launcher leaves the hands and the same instance respawns on a valid, non-hammer tile. Unsupported world launchers fall to lower floors; below the kill zone they respawn. Unchanged from the prior pass and covered by tests.
-- **Aim mode:** while holding, `FollowCamera` switches to an over-the-shoulder camera: a converging view 14 m along the aim ray, shoulder offset 1.25–1.95 m growing with steepness, FOV 55→43. Aim pitch is separate from follow pitch and ranges from −1.15 (look up ≈66°) to +1.3 (look down ≈74°). Aim sensitivity is 0.7× normal. Aim pitch resets to level on each new aim.
-- **Acquisition:** screen-space nearest living player within 55 m whose chest is inside the reticle cone: 56 px for mouse, 84 px for touch. The lock accumulates only while the same target stays in the cone. Leaving resets it to 0. Two seconds locks, with ring color, beep and nameplate outline.
-- **Aim assist:** `aimAssist()` in `main.js` rotates yaw/aim-pitch toward the current or nearby target with exponential smoothing. Mouse: 72 px radius, strength 1.3/s. Touch: 120 px, 3.4/s. It never considers off-screen or out-of-range targets.
-- **Launch:** muzzle = player chest + 0.45 m forward. The initial velocity points from the muzzle toward the point the reticle ray meets (first intact floor or 60 m out). It falls back to the direct target line if that points backwards. Speed 24 m/s.
-- **Homing (`Match.rocketStep`):** each fixed step the heading rotates toward an aim point by at most 3.4 rad/s (9 rad/s in the terminal phase); there is no snapping. Aim point: target feet + 0.35 m. When the rocket is below the target's floor, it aims at the underside directly beneath the target. Within 2.2 m horizontally it enters a terminal dive into the target's supporting tiles.
-- **Line of sight:** the segment for each step is tested against every floor slab (`Match.segmentHit`). It uses the tile top plane (y+0.15) when descending and the underside (y−0.5) when rising. Intact cells block; missing cells pass. On the target's own floor within 1.5 tile pitches of the target, the impact snaps to the target's footing (a hit). Elsewhere the struck floor breaks at the impact point (`obstruction: true`).
-- **Destruction:** `Match.destroyAt(level, x, z)` removes the cell containing the point plus the neighbours toward the impact quadrant: a compact 2x2, at most 4 tiles. Missing or out-of-grid cells are skipped, never substituted. No HP exists.
-- **HUD/visuals:** "FLOOR IN THE WAY" (orange reticle) when the muzzle→target path crosses an intact floor that is not the target's own floor. Impact flash shows "DIRECT HIT / FLOOR BLOCKED · N TILES". Pooled rocket meshes, 120-puff instanced smoke trail and impact flashes (`src/rocket-fx.js`). The scoped camera stays on while your own rocket flies. Own floor fades to 0.4 opacity when aiming steeply down; overhead floors stay at 0.13. This is visual only; collision is unchanged.
-- **Onboarding:** a controls panel appears before the first match (countdown paused; `localStorage` key `pizzeria-drop-controls-seen`). The "? Controls" button and `?` key pause and reopen it; Escape closes. Touch devices show the touch list first and hide the desktop list. A contextual "ROCKET EQUIPPED" hint shows on pickup for 6 s the first time, then 2.6 s, and hides once the first lock completes.
+The 2-second lock was too slow for the pace of the game. `RULES.lockSeconds = 0`, so `Match.updateLock` locks on the first fixed step that a valid candidate is supplied. A valid candidate is a living other player whose chest projects inside the reticle cone (mouse 56 px, touch 76 px), is in front of the camera and is within 55 m. `RULES.lockGrace = 0.25` s keeps an existing lock through brief jitter, then drops it.
 
-## Validation evidence (this pass)
+Feedback on lock:
+- the reticle ring fills and turns green with a pop animation
+- the target's nameplate is outlined
+- the lock beep plays
+- the reticle text reads `LOCKED · <name> · RELEASE TO FIRE` (or `FLOOR IN THE WAY`)
 
-- `npm test`: **21 gameplay tests** (14 prior + 7 rocket: up-shot, down-through-gap, same floor, blocked by intact floor, LOS helper, ammo 2→1→0 with real flights, unlocked release keeps ammo) plus 15-GLB validation. All pass.
-- `npm run test:browser` = `acceptance-browser.mjs` (prior regression: countdown/first-contact timer, WASD/Space/E, camera descent, auto-equip, lock reset, F hold/release 4 tiles, 8-clip grip IK, 15-actor City/Volcano, real CDP multi-touch, Jump/Dive, body removal) + `acceptance-rocket.mjs`. All pass on dev (5173) and production preview (5174) with zero console errors.
-- `acceptance-rocket.mjs` uses **real input**: Playwright mouse down/move/up and CDP touch, with fixtures only for placement. Report: `assets/reports/rocket-browser-validation.json`. Screenshots: `rocket-*-locked/flight/impact.png`, `rocket-mobile-*`, `controls-panel-*.png`, `rocket-equipped-hint.png`.
-  - A: below → look up (aim pitch ≈ −0.74) → lock → release. The rocket climbs and breaks the target's floor under the target.
-  - B/E: above → look down (≈ +1.13) through a 2-cell gap. The rocket descends and breaks the lower target floor.
-  - C: same floor, exactly 4 tiles, `ROCKETS: 2 → 1`.
-  - D: an intact floor blocks the shot; the obstruction breaks and the lower floor is untouched; reticle warning shown.
-  - F/G: 2 → 1 → 0; held launcher hidden; HUD returns to "FIND A LAUNCHER"; launcher respawned on a tile.
-  - H: panel before the first match, countdown waits, "? Controls" reopens, Escape closes. Mobile panel fits 844×390 with a sticky button.
-  - I: mobile hold FIRE + right-side drag aims up and down; lock + release fires both ways.
-- Performance (local Chrome, 15 actors, short sample): City ≈5.6 ms median / 6.1 ms p95, 159 draw calls; Volcano ≈5.5 / 6.5 ms, 141 calls. Not a phone, Staige or network certification.
-- Regression rules confirmed by tests: first-landing tile timer, square grids, Easy full / Medium–Hard intentional gaps, horizontal 360° hammer with impulse knockback, air steering, one-floor jump, lava elimination and 0.75 s body removal. Floor tracker and names still work. Both worlds load and run.
-- Cityscape was checked against `Reference images/ChatGPT Image Oct 6, 2026, 09_41_50 PM.png`. It still reads as an urban sinkhole (rim roads, lit facades, scaffolds, barriers, traffic, deep cavity), not random boxes. Compared with the reference it is cooler in tone, with less warm glow and haze, and has no red steel trusses under the floors. That is optional art polish; nothing was rebuilt.
+Aim assist: desktop is light (72 px radius, strength 1.0/s); touch is slightly stronger (104 px, 2.2/s). It never picks off-screen or distant players.
+
+Targeting visibility: on screen, in range and in front. Floors are faded locally, so a target seen through a translucent floor can be locked, and the HUD warns when an intact floor will block the rocket. This preserves the intentional floor-obstruction mechanic.
+
+Unchanged: auto-equip, 2 shots, 3D homing with terminal dive, floor line of sight, max 4-tile 2x2 destruction, zero player damage, launcher respawn and fall rules. Rocket details are in the Brain workflows.
+
+## Winner flow
+
+- **Detection (`Match.resolve`, end of every active step):** when at most one player is alive and the match has at least 2 players, phase becomes `won`.
+  - `winner` is the id, or `null` for a draw when the final players are eliminated in the same step.
+  - It also records `wonAt` and builds `result = { winner, winnerName, draw, placements, names, duration }`. Placements are the winner first, then reverse elimination order.
+  - Emits `winner`.
+- **Winner state:** projectiles cleared and holds cancelled. `secureWinner` puts the winner on its footing tile, or the nearest intact tile if airborne, sets them grounded and switches them to `dance`. While `won`, `step()` only updates eliminated-body removal. Tiles, timers, hammers, launchers, movement and lava checks are frozen, so the winner cannot die. `jump/dive/holdFire` are rejected and input is disabled in `main.js`.
+- **Names:** the lobby has a required "YOUR NAME" field (max 14 characters, saved in `localStorage` key `pizzeria-drop-name`). `Match({ names })` uses it for player 0; bots are `Pizzaiolo N`. An empty name blocks the drop and highlights the field.
+- **Presentation (local only, `main.js` `startCelebration`/`updateCelebration`):**
+  - slow motion: visual time ramps from 0.3× to 1× over 0.9 s; the simulation is frozen
+  - `FollowCamera.celebrate` eases into a slow orbit framing the winner's head from the side the camera was already on
+  - the winner turns toward the camera, plays the existing `dance` clip with decaying hops, and the held launcher is hidden
+  - crown pop; 60 + 36 pieces of confetti from a 96-instance pool; 24 orbiting sparkles
+  - gold screen vignette, fanfare (4 WebAudio notes) and a `WINNER / <name>` banner
+  - at 3.2 s, a results card shows 🏆, WINNER, the name, "LAST ONE STANDING", top-5 placements, PLAY AGAIN and RETURN TO LOBBY
+  - a draw shows "DRAW / NO ONE STANDING" with no crown
+- **Crown (`src/winner-fx.js`):** procedural, baked into 3 vertex-colored meshes: gold band, five tipped points, red/blue jewels. One instance is created at startup and re-parented to the winner's `Head` bone, so it follows animation. It is never part of the character GLB. `reset()` detaches and hides it.
+- **Rematch/reset:** PLAY AGAIN calls `requestRematch()`, which in local mode runs `begin()`. That rebuilds the world through `setupWorld()`: new `Match`, new actors, tiles, launchers and hammers, rocket FX reset, `endCelebration()` (crown detached, VFX cleared, overlays hidden, `match-won` class removed), HUD reset and `follow.reset()`. RETURN TO LOBBY calls `returnToLobby()` → `setupWorld()` without playing. `onMatchResult()` stores `window.dropStudio.lastResult` and dispatches `pizzeria:match-result`. These are the seams for a networked rematch/lobby.
+
+## Validation evidence (this pass, dev 5173 and production preview 5174)
+
+- `npm test`: **27 gameplay tests** + 15-GLB validation.
+  - New this pass: instant lock/grace/self/dead rejection; release without lock keeps ammo; named last-player-standing with placements; bot winner; winner immune and hazards frozen; airborne winner secured on a tile; draw; clean new Match.
+- `npm run test:browser` runs three scripts. All pass with zero console errors on dev and production:
+  - **`acceptance-browser.mjs`** (prior regression): countdown/first-contact timer, WASD/Space/E, camera descent, auto-equip, lock grace reset, F hold/release 4 tiles, 8-clip grip IK, 15-actor City/Volcano, real CDP multi-touch, Jump/Dive, body removal.
+  - **`acceptance-rocket.mjs`** (8 checks, real mouse and CDP touch): asserts the lock is already set in the same sample that acquires the target (lock time under 0.25 s) for same floor, above, below, and touch up/down. Also covers blocked floor, gap shot, ammo 2→1→0, onboarding text with no 2-second wording, and the hint "Aim at a player to lock".
+  - **`acceptance-winner.mjs`** (12 checks, real clicks/taps):
+    - an empty name blocks the drop
+    - TEST 1 auto-winner; TEST 2 "PARTH" shown; TEST 3 crown on the winner's `Head` bone above the head; TEST 4 dance + celebration
+    - TEST 5 winner survives being moved into lava and tile timers stay frozen
+    - results card content and the published result event
+    - TEST 6 PLAY AGAIN gives a clean state: phase, winner, all alive, tiles, launchers, ammo, name, crown, VFX, overlays, camera, floor tracker
+    - bot winner gets the crown on the correct character
+    - TEST 7 RETURN TO LOBBY; TEST 8 no 2-second wording
+    - mobile 844×390 results buttons on screen and PLAY AGAIN by tap
+  - Screenshots: `winner-celebration.png`, `winner-results.png`, `winner-results-mobile.png`, `rocket-*`. Reports: `*-browser-validation.json`.
+- Performance (local Chrome, 15 actors): City about 5.5 ms median, 162 draw calls; Volcano about 5.6 ms, 146 calls. Winner VFX add 2 instanced draws and 3 crown meshes only during a celebration.
+- `npm run build` succeeds (≈734 kB JS, 190 kB gzip).
 
 ## Files changed this pass
 
-`src/gameplay.js` (3D homing rockets, `segmentHit`/`lineOfSight`, `destroyAt`, `muzzle`, cancel event) · `src/follow-camera.js` (aim camera, `AIM_PITCH`) · `src/main.js` (acquisition profiles, aim assist, aim direction, blocked check, own-floor fade, pause, rocket FX, rocket-watch camera, controls panel wiring) · `src/controls.js` (pointer type, FIRE-thumb look) · `src/hud.js`, `src/game.css` (controls panel, ? button, hints, `ROCKETS: N`, warnings, target outline) · `src/rocket-fx.js` (new) · `index.html` (sidebar "? Controls") · `scripts/test-gameplay.mjs` (+7 tests) · `scripts/acceptance-rocket.mjs` (new) · `scripts/acceptance-browser.mjs` (skips the first-run panel) · `package.json` (`test:browser`, `test:rocket`) · `README.md`, `.gitignore`, this handoff, Brain.
+`src/gameplay.js` (instant lock + grace, names, `resolve`/`secureWinner`, won phase, eliminations, result) · `src/main.js` (name field, celebration, slow motion, results/rematch/lobby seams, aim-assist tuning) · `src/winner-fx.js` (new) · `src/follow-camera.js` (`celebrate`, shared `constrain`) · `src/hud.js`, `src/game.css` (lock text/feedback, victory banner, results card, fanfare, name field) · `index.html` (YOUR NAME field) · `scripts/test-gameplay.mjs` (+6 net tests) · `scripts/acceptance-winner.mjs` (new) · `scripts/acceptance-rocket.mjs`, `scripts/acceptance-browser.mjs` (instant lock, name seeding) · `package.json` (`test:browser` includes winner, `test:winner`) · README, this handoff, Brain.
 
 ## Known bugs / limitations
 
-- Lock acquisition is screen-space and does not require line of sight. A target seen through a faded floor can be locked; the rocket will then hit that floor, and the HUD warns "FLOOR IN THE WAY". This is intentional.
-- A target that jumps over a gap during the terminal dive can make the rocket continue to the floor below.
-- The big mascot head fills the lower-left of the screen when aiming steeply. The reticle stays clear, but there is no local-player fade.
-- Camera collision is analytic (cavity bounds + floor clamps), not mesh raycasts.
-- Bots never pick up or use rockets. There is no player–player collision.
+- Lock acquisition is screen-space and does not require line of sight (intentional; HUD warns). A target jumping over a gap during the terminal dive can make the rocket continue to the floor below.
+- The celebration uses the existing `dance` clip plus procedural hops. There is no dedicated victory clip.
+- The draw case has no special camera beyond the normal follow.
+- Bots never use rockets; there is no player–player collision; camera collision is analytic.
 - Mobile was validated with Chrome touch emulation only. Physical iOS/Android, thermals and long sessions are unverified.
-- No winner/rematch flow; a match continues until you exit or restart.
 
 ## Deployment / repository status
 
-- Public GitHub repository: see the final report of this pass. Excluded from git: `node_modules`, `dist`, zips, the Mixamo source FBX folders (`assets/Girl 1`, `assets/Guy 1`) and the textures extracted from them. Committed GLBs are enough to run and build. Regenerating assets needs the FBX folders restored locally.
-- **Staige:** no SDK, adapter, account configuration or deployment exists.
-- **Networking:** none.
+- GitHub: public repo `parthaadh-cenzer/pizzeria-drop`, branch `main`.
+- Excluded from git: `node_modules`, `dist`, zips, Mixamo source FBX folders (`assets/Girl 1`, `assets/Guy 1`) and textures extracted from them. Committed GLBs are enough to run and build.
+- **Staige:** no SDK, adapter or deployment. **Networking:** none.
 
 ## Remaining integration work (in order)
 
-1. Obtain the Staige integration contract; add an adapter around `Match` (keep pure tests).
-2. Authoritative server: tile deadlines, launcher ownership/ammo, lock validation, rocket flight and impact (`rocketStep`/`destroyAt` are deterministic and portable), elimination; client input with timestamps; remote interpolation; winner/rematch lifecycle.
-3. Physical phone QA (landscape iOS Safari / Android Chrome), aim-assist tuning on real thumbs, sustained 15-player profiling, optional quality tiers.
-4. Optional: bot rocket usage, local-player fade while aiming, City art polish toward the reference (warm haze, red trusses).
+1. Obtain the Staige integration contract; wrap `Match` in an adapter (keep pure tests).
+2. Authoritative server: tile deadlines, launcher ownership/ammo, lock validation, rocket flight/impact, elimination and `resolve()` on the server. Clients receive the `winner` event/result and drive the local celebration. Replace `requestRematch()`/`returnToLobby()` with networked rematch voting and lobby return.
+3. Matchmaking, remote interpolation, reconnect handling.
+4. Physical phone QA and aim-assist tuning on real thumbs; sustained 15-player profiling.
+5. Optional: bot rocket usage, local-player fade while aiming, City art polish (warm haze, red trusses), a dedicated victory clip.
 
 ## Continuation map
 
 | Path | Responsibility |
 | --- | --- |
-| `src/gameplay.js` | Fixed-step Match state, contacts/timers, jump/dive, hammer impulse, launcher lifecycle, lock, 3D rockets, LOS, elimination |
-| `src/main.js` | Renderer, studio UI, loading, sim→visual, aim acquisition/assist, fading, `window.dropStudio` debug surface |
+| `src/gameplay.js` | Fixed-step Match: contacts/timers, movement, hammers, launchers, instant lock, 3D rockets, LOS, elimination, winner resolution/result |
+| `src/main.js` | Renderer, studio/lobby UI, sim→visual, aim acquisition/assist, fading, celebration, rematch/lobby seams, `window.dropStudio` |
 | `src/controls.js` | Keyboard/mouse and independent touch pointers |
-| `src/follow-camera.js` | Follow camera and aim camera |
-| `src/hud.js`, `src/game.css` | HUD, controls panel, hints, names, floor counts, reticle/audio |
-| `src/rocket-fx.js` | Pooled rocket/trail/flash visuals |
-| `src/weapon-rig.js`, `src/traffic.js` | Hand IK; rim traffic and falling-car gag |
-| `assets/runtime/*` | Layout, characters, props, City/Volcano generators, shaders |
+| `src/follow-camera.js` | Follow, aim and celebration cameras |
+| `src/hud.js`, `src/game.css` | HUD, controls panel, hints, names, floor counts, reticle/audio, victory banner, results |
+| `src/rocket-fx.js`, `src/winner-fx.js` | Pooled rocket visuals; crown, confetti, sparkles |
+| `src/weapon-rig.js`, `src/traffic.js` | Hand IK; rim traffic |
+| `assets/runtime/*` | Layout, characters, props, worlds, shaders |
 | `scripts/*` | Asset build, validation, gameplay tests, browser acceptance |
 
 ## Commands
@@ -98,8 +123,8 @@ npm run preview -- --port 5174
 npm run assets                # only with assets/Girl 1 and assets/Guy 1 restored
 ```
 
-Chrome path for acceptance: `C:/Program Files/Google/Chrome/Application/chrome.exe`. Dev/preview servers may already be running; check before launching duplicates.
+Chrome path for acceptance: `C:/Program Files/Google/Chrome/Application/chrome.exe`.
 
 ## Assets and provenance
 
-Source FBXs (Mixamo) stay local in `assets/Girl 1` and `assets/Guy 1` and are not in the public repo. Six motions are retargeted at 24 Hz; landing/hit are authored. Character geometry is procedural and original. Rights to the source assets were not independently audited. References: `Reference images/ChatGPT Image Oct 6, 2026, 09_41_50 PM.png` (City) and `... 09_38_23 PM.png` (Volcano) guide style, not gameplay topology. Generated assets live in `assets/characters`, `assets/props`, `assets/worlds`; sizes/counts are in `assets/manifest.json`.
+Source FBXs (Mixamo) stay local and are not in the public repo. Six motions are retargeted at 24 Hz; landing/hit are authored. Character, crown and prop geometry are procedural and original. Source-asset rights were not independently audited. The reference images in `Reference images/` guide style, not gameplay topology.

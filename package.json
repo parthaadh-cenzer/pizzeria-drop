@@ -9,10 +9,11 @@
     "build": "vite build",
     "assets": "node scripts/build-assets.mjs",
     "test": "node scripts/test-gameplay.mjs && node scripts/validate.mjs",
-    "test:browser": "node scripts/acceptance-browser.mjs && node scripts/acceptance-rocket.mjs",
+    "test:browser": "node scripts/acceptance-browser.mjs && node scripts/acceptance-rocket.mjs && node scripts/acceptance-winner.mjs",
     "capture": "node scripts/capture.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "test:rocket": "node scripts/acceptance-rocket.mjs"
+    "test:rocket": "node scripts/acceptance-rocket.mjs",
+    "test:winner": "node scripts/acceptance-winner.mjs"
   },
   "keywords": [],
   "author": "",

@@ -4,12 +4,12 @@ export function createHUD() {
     .querySelector("main")
     .insertAdjacentHTML(
       "beforeend",
-      `<div id="match-hud"><div id="match-banner"><b>LOCAL MATCH</b><span id="alive-count"></span><button id="controls-open" aria-label="Show controls">? Controls</button><button id="exit-match">Exit match</button><button id="fullscreen">⛶ Fullscreen</button></div><div id="floor-tracker" aria-label="Players per floor"></div><div id="nameplates"></div><div id="countdown" aria-live="polite"></div><div id="aim-reticle"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="progress" cx="60" cy="60" r="52"/></svg><i></i><span id="lock-text"></span></div><div id="weapon-status"></div><div id="match-help">WASD move · Drag mouse look · SPACE jump · E dive · Hold LMB aim/lock · Release fire · ? controls</div><div id="hud-flash" aria-live="polite"></div><div id="rocket-hint" hidden><b>ROCKET EQUIPPED</b><span>Hold <em class="k-fire"></em> to aim</span><span>Keep a target in the reticle for 2 seconds</span><span>Release to fire</span></div><div id="touch-controls"><div id="joystick" aria-label="Movement joystick"><i></i></div><div class="touch-actions"><button id="touch-dive">DIVE<small>E</small></button><button id="touch-jump">JUMP<small>SPACE</small></button><button id="touch-fire">FIRE<small>HOLD · AIM</small></button></div></div></div>`,
+      `<div id="match-hud"><div id="match-banner"><b>LOCAL MATCH</b><span id="alive-count"></span><button id="controls-open" aria-label="Show controls">? Controls</button><button id="exit-match">Exit match</button><button id="fullscreen">⛶ Fullscreen</button></div><div id="floor-tracker" aria-label="Players per floor"></div><div id="nameplates"></div><div id="countdown" aria-live="polite"></div><div id="aim-reticle"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="progress" cx="60" cy="60" r="52"/></svg><i></i><span id="lock-text"></span></div><div id="weapon-status"></div><div id="match-help">WASD move · Drag mouse look · SPACE jump · E dive · Hold LMB aim/lock · Release fire · ? controls</div><div id="hud-flash" aria-live="polite"></div><div id="rocket-hint" hidden><b>ROCKET EQUIPPED</b><span>Hold <em class="k-fire"></em> to aim</span><span>Aim at a player to lock</span><span>Release to fire</span></div><div id="victory-banner" hidden><small>WINNER</small><strong id="victory-name"></strong></div><div id="results" hidden role="dialog" aria-modal="true" aria-labelledby="results-name"><div class="results-card"><div class="results-trophy" aria-hidden="true">🏆</div><small id="results-title">WINNER</small><h2 id="results-name"></h2><p id="results-sub">LAST ONE STANDING</p><ol id="results-placements"></ol><div class="results-actions"><button id="results-play-again" class="results-primary">PLAY AGAIN</button><button id="results-lobby">RETURN TO LOBBY</button></div></div></div><div id="touch-controls"><div id="joystick" aria-label="Movement joystick"><i></i></div><div class="touch-actions"><button id="touch-dive">DIVE<small>E</small></button><button id="touch-jump">JUMP<small>SPACE</small></button><button id="touch-fire">FIRE<small>HOLD · AIM</small></button></div></div></div>`,
     );
   document.body.insertAdjacentHTML("beforeend", CONTROLS_PANEL);
   return new HUD();
 }
-const CONTROLS_PANEL = `<div id="controls-panel" hidden role="dialog" aria-modal="true" aria-labelledby="controls-title"><div class="cp-card"><h2 id="controls-title">How to drop</h2><p class="cp-sub">Tiles collapse 3 seconds after first touch. Fall into the lava and you're out.</p><div class="cp-cols"><section class="cp-desktop"><h3>Keyboard &amp; mouse</h3><dl><dt>W A S D</dt><dd>Move</dd><dt>Mouse drag</dt><dd>Camera / aim</dd><dt>SPACE</dt><dd>Jump</dd><dt>E</dt><dd>Dive</dd><dt>Hold LMB</dt><dd>Aim / lock rocket</dd><dt>Release LMB</dt><dd>Fire</dd></dl></section><section class="cp-touch"><h3>Touch</h3><dl><dt>Left stick</dt><dd>Move</dd><dt>Drag right side</dt><dd>Camera / aim</dd><dt>JUMP</dt><dd>Jump</dd><dt>DIVE</dt><dd>Dive</dd><dt>Hold FIRE</dt><dd>Aim / lock (drag to look)</dd><dt>Release FIRE</dt><dd>Fire</dd></dl></section></div><ul class="cp-rules"><li><b>Rocket launcher:</b> touch it to equip · 2 shots.</li><li>Keep a player in the reticle for <b>2 seconds</b> to lock, then release. Rockets break up to 4 tiles under the target — no damage.</li><li>Look up or down to hit other floors. Intact floors block rockets; gaps let them through.</li></ul><button id="controls-go">Got it — let's drop</button></div></div>`;
+const CONTROLS_PANEL = `<div id="controls-panel" hidden role="dialog" aria-modal="true" aria-labelledby="controls-title"><div class="cp-card"><h2 id="controls-title">How to drop</h2><p class="cp-sub">Tiles collapse 3 seconds after first touch. Fall into the lava and you're out.</p><div class="cp-cols"><section class="cp-desktop"><h3>Keyboard &amp; mouse</h3><dl><dt>W A S D</dt><dd>Move</dd><dt>Mouse drag</dt><dd>Camera / aim</dd><dt>SPACE</dt><dd>Jump</dd><dt>E</dt><dd>Dive</dd><dt>Hold LMB</dt><dd>Aim / lock rocket</dd><dt>Release LMB</dt><dd>Fire</dd></dl></section><section class="cp-touch"><h3>Touch</h3><dl><dt>Left stick</dt><dd>Move</dd><dt>Drag right side</dt><dd>Camera / aim</dd><dt>JUMP</dt><dd>Jump</dd><dt>DIVE</dt><dd>Dive</dd><dt>Hold FIRE</dt><dd>Aim / lock (drag to look)</dd><dt>Release FIRE</dt><dd>Fire</dd></dl></section></div><ul class="cp-rules"><li><b>Rocket launcher:</b> touch it to equip · 2 shots.</li><li>Hold fire and <b>aim at a player to lock</b> instantly, then release to fire. Rockets break up to 4 tiles under the target — no damage.</li><li>Last pizzaiolo standing wins the crown.</li><li>Look up or down to hit other floors. Intact floors block rockets; gaps let them through.</li></ul><button id="controls-go">Got it — let's drop</button></div></div>`;
 const coarse = () => matchMedia?.("(pointer: coarse)").matches;
 class HUD {
   constructor() {
@@ -91,6 +91,60 @@ class HUD {
     o.start();
     o.stop(this.audio.currentTime + 0.21);
   }
+  showVictory(result) {
+    this.hintUntil = 0;
+    document.querySelector("#rocket-hint").hidden = true;
+    const banner = document.querySelector("#victory-banner");
+    banner.querySelector("small").textContent = result.draw ? "DRAW" : "WINNER";
+    document.querySelector("#victory-name").textContent = result.draw
+      ? "NO ONE STANDING"
+      : result.winnerName;
+    banner.hidden = false;
+    this.fanfare();
+  }
+  showResults(result) {
+    document.querySelector("#victory-banner").hidden = true;
+    document.querySelector("#results-title").textContent = result.draw
+      ? "DRAW"
+      : "WINNER";
+    document.querySelector("#results-name").textContent = result.draw
+      ? "NO ONE STANDING"
+      : result.winnerName;
+    document.querySelector("#results-sub").textContent = result.draw
+      ? "THE FLOOR WON THIS ONE"
+      : "LAST ONE STANDING";
+    const list = document.querySelector("#results-placements");
+    list.replaceChildren(
+      ...result.names.slice(0, 5).map((name) => {
+        const li = document.createElement("li");
+        li.textContent = name;
+        return li;
+      }),
+    );
+    document.querySelector("#results").hidden = false;
+    document.querySelector("#results-play-again").focus({ preventScroll: true });
+  }
+  hideVictory() {
+    document.querySelector("#victory-banner").hidden = true;
+    document.querySelector("#results").hidden = true;
+  }
+  fanfare() {
+    if (!this.audio) return;
+    const now = this.audio.currentTime;
+    [523, 659, 784, 1047].forEach((f, i) => {
+      const o = this.audio.createOscillator(),
+        g = this.audio.createGain(),
+        t = now + i * 0.11;
+      o.type = "triangle";
+      o.frequency.setValueAtTime(f, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (i === 3 ? 0.6 : 0.2));
+      o.connect(g).connect(this.audio.destination);
+      o.start(t);
+      o.stop(t + 0.65);
+    });
+  }
   reset() {
     document.querySelector("#nameplates").replaceChildren();
     this.names.clear();
@@ -107,7 +161,9 @@ class HUD {
     document.querySelector("#alive-count").textContent =
       `${match.players.filter((p) => p.alive).length} / ${match.players.length} remaining`;
     document.querySelector("#countdown").textContent =
-      match.phase === "countdown"
+      match.phase === "won"
+        ? ""
+        : match.phase === "countdown"
         ? Math.max(1, Math.ceil(match.countdown))
         : match.countdown > -0.5
           ? "DROP!"
@@ -130,22 +186,20 @@ class HUD {
     document
       .querySelector("#aim-reticle")
       .classList.toggle("locked", lock.locked);
-    document.querySelector(".progress").style.strokeDashoffset =
-      327 * (1 - lock.seconds / 2);
+    document.querySelector(".progress").style.strokeDashoffset = lock.locked
+      ? 0
+      : 327;
     document
       .querySelector("#aim-reticle")
       .classList.toggle("blocked", !!aim.blocked);
+    const locked = match.players[lock.target];
     document.querySelector("#lock-text").textContent = lock.locked
-      ? aim.blocked
-        ? "LOCKED · FLOOR IN THE WAY"
-        : "LOCKED · RELEASE TO FIRE"
-      : lock.target !== null
-        ? `LOCKING ${((lock.seconds / 2) * 100).toFixed(0)}%${aim.blocked ? " · FLOOR IN THE WAY" : ""}`
-        : "KEEP A PLAYER IN THE RING · LOOK UP / DOWN";
+      ? `LOCKED · ${locked?.name ?? ""} · ${aim.blocked ? "FLOOR IN THE WAY" : "RELEASE TO FIRE"}`
+      : "AIM AT A PLAYER TO LOCK · LOOK UP / DOWN";
     document.querySelector("#weapon-status").innerHTML = !p.alive
       ? "ELIMINATED · <span>Reset to drop again</span>"
       : p.launcher !== null
-        ? `ROCKETS: <b>${p.ammo}</b><span>${coarse() ? "Hold FIRE" : "Hold left mouse"} · lock 2s · release</span>`
+        ? `ROCKETS: <b>${p.ammo}</b><span>${coarse() ? "Hold FIRE" : "Hold left mouse"} · aim at a player · release</span>`
         : "FIND A LAUNCHER <span>Touch to equip · two shots</span>";
     document.querySelector("#touch-fire").disabled =
       p.launcher === null || !p.alive;
@@ -187,7 +241,7 @@ class HUD {
       }
       if (e.type === "equipped" && e.player === 0) this.showRocketHint();
       if (e.type === "fire-cancelled" && e.player === 0)
-        this.flash("NOT LOCKED — HOLD 2s ON A TARGET");
+        this.flash("NOT LOCKED — AIM AT A PLAYER, THEN RELEASE");
       if (e.type === "rocket-impact" && e.owner === 0)
         this.flash(
           e.obstruction

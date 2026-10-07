@@ -578,3 +578,218 @@ button {
     box-shadow: 0 -10px 14px #191d2c;
   }
 }
+
+/* Lobby name field */
+.name-field {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 10px;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #81889b;
+}
+.name-field input {
+  padding: 10px 12px;
+  border: 1px solid #ffffff25;
+  border-radius: 7px;
+  background: #ffffff0d;
+  color: #fff;
+  font: 700 14px "DM Sans", sans-serif;
+  letter-spacing: 0.5px;
+}
+.name-field input:focus-visible {
+  outline: 2px solid #ffcb75;
+  outline-offset: 1px;
+}
+.name-field input.invalid {
+  border-color: #ff6a4d;
+  box-shadow: 0 0 0 2px #ff6a4d55;
+}
+
+/* Instant lock feedback */
+#aim-reticle.locked svg {
+  animation: lock-pop 0.22s ease-out;
+}
+@keyframes lock-pop {
+  from {
+    transform: rotate(-90deg) scale(1.25);
+  }
+  to {
+    transform: rotate(-90deg) scale(1);
+  }
+}
+
+/* Winner state */
+body.match-won #aim-reticle,
+body.match-won #weapon-status,
+body.match-won #touch-controls,
+body.match-won #match-help,
+body.match-won #rocket-hint,
+body.match-won #hud-flash {
+  display: none !important;
+}
+body.match-won #match-hud::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, #ffc63a40 100%);
+  animation: victory-glow 3.2s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes victory-glow {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+#victory-banner {
+  position: absolute;
+  top: 13%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  pointer-events: none;
+  animation: banner-in 0.5s 0.25s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+#victory-banner[hidden] {
+  display: none;
+}
+#victory-banner small {
+  font: 700 22px "Barlow Condensed", sans-serif;
+  letter-spacing: 6px;
+  color: #ffd27a;
+  text-shadow: 0 2px 10px #000a;
+}
+#victory-banner strong {
+  font: 700 clamp(44px, 9vw, 96px) / 0.95 "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    0 4px 0 #e0892a,
+    0 10px 30px #0009;
+}
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+#results {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #0b0d18a6;
+  pointer-events: auto;
+  animation: results-in 0.35s ease-out;
+}
+#results[hidden] {
+  display: none;
+}
+@keyframes results-in {
+  from {
+    opacity: 0;
+  }
+}
+.results-card {
+  width: min(380px, 100%);
+  max-height: calc(100svh - 32px);
+  overflow: auto;
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: #191d2cf2;
+  border: 1px solid #ffc63a66;
+  box-shadow: 0 20px 60px #000a;
+  text-align: center;
+}
+.results-trophy {
+  font-size: 40px;
+  line-height: 1;
+}
+.results-card small {
+  display: block;
+  margin-top: 6px;
+  font: 700 14px "Barlow Condensed", sans-serif;
+  letter-spacing: 5px;
+  color: #ffd27a;
+}
+.results-card h2 {
+  margin: 2px 0 0;
+  font: 700 48px/1 "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+#results-sub {
+  margin: 6px 0 12px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #b9bfd0;
+}
+#results-placements {
+  margin: 0 auto 16px;
+  padding: 0 0 0 22px;
+  max-width: 220px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #cfd3e0;
+}
+#results-placements li:first-child {
+  color: #ffcb75;
+  font-weight: 700;
+}
+.results-actions {
+  display: grid;
+  gap: 8px;
+}
+.results-actions button {
+  padding: 12px;
+  border: 1px solid #ffffff30;
+  border-radius: 8px;
+  background: #35394b;
+  color: #fff;
+  font: 700 13px "DM Sans", sans-serif;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.results-actions .results-primary {
+  border: 0;
+  background: #ff7a3d;
+}
+.results-actions button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+@media (max-height: 500px) {
+  #victory-banner {
+    top: 8%;
+  }
+  .results-card {
+    padding: 12px 18px;
+  }
+  .results-trophy {
+    font-size: 26px;
+  }
+  .results-card h2 {
+    font-size: 34px;
+  }
+  #results-placements {
+    display: none;
+  }
+  .results-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}

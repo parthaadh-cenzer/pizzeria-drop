@@ -1,0 +1,18 @@
+{
+  "environment": "Local headless Chrome; desktop 1280x800 and 844x390 touch. Eliminations induced by moving actors below the kill plane; all UI via real clicks/taps.",
+  "checks": [
+    "empty name blocks the match and highlights the name field",
+    "TEST 1: one of two players eliminated → remaining player automatically declared winner",
+    "TEST 2: entered player name PARTH shown as winner",
+    "TEST 3: crown attached to the winner's Head bone, above the head",
+    "TEST 4: celebration runs (dance, hops, crown pop, confetti, banner, camera)",
+    "TEST 5: winner cannot be eliminated; tile timers frozen after resolution",
+    "results overlay: trophy, WINNER, PARTH, LAST ONE STANDING, PLAY AGAIN, RETURN TO LOBBY; result event published",
+    "TEST 6: PLAY AGAIN gives a clean match (players, tiles, launchers, ammo, crown, VFX, camera, HUD, winner state)",
+    "bot winner: crown on the bot's character, bot name shown",
+    "TEST 7: RETURN TO LOBBY returns to setup with no stale winner state",
+    "TEST 8: controls/tutorial text has no 2-second lock reference",
+    "mobile 844x390: results buttons on screen; PLAY AGAIN by tap resets"
+  ],
+  "errors": []
+}

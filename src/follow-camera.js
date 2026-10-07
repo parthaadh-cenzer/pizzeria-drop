@@ -80,6 +80,31 @@ export class FollowCamera {
           ),
         );
     }
+    this.constrain(desired, p);
+    this.camera.position.lerp(desired, 1 - Math.exp(-dt * 14));
+    this.camera.lookAt(viewTarget);
+    this.camera.fov = MathUtils.damp(this.camera.fov, aiming ? 43 : 55, 12, dt);
+    this.camera.updateProjectionMatrix();
+  }
+  // Winner moment: ease toward a slow orbit in front of the winner, looking at the chest.
+  celebrate(p, dt, t, facing) {
+    // Frame the head and crown, slightly from above.
+    const head = p.position.clone().add(new Vector3(0, 1.45, 0));
+    this.focus.lerp(head, 1 - Math.exp(-dt * 6));
+    const angle = facing + Math.sin(t * 0.45) * 0.45,
+      distance = MathUtils.lerp(7.4, 6.2, Math.min(1, t / 2.5));
+    const desired = this.focus
+      .clone()
+      .add(
+        new Vector3(Math.sin(angle) * distance, 1.6, Math.cos(angle) * distance),
+      );
+    this.constrain(desired, p);
+    this.camera.position.lerp(desired, 1 - Math.exp(-dt * 3.2));
+    this.camera.lookAt(this.focus);
+    this.camera.fov = MathUtils.damp(this.camera.fov, 42, 4, dt);
+    this.camera.updateProjectionMatrix();
+  }
+  constrain(desired, p) {
     // The player camera stays inside both environments' clear inner cavity.
     desired.x = MathUtils.clamp(desired.x, -17.1, 17.1);
     desired.z = MathUtils.clamp(desired.z, -17.1, 17.1);
@@ -92,9 +117,6 @@ export class FollowCamera {
     const above = LEVELS.filter((y) => y > p.position.y + 2.6).at(-1);
     if (above !== undefined) desired.y = Math.min(desired.y, above - 0.7);
     desired.y = Math.max(desired.y, p.position.y + 0.4);
-    this.camera.position.lerp(desired, 1 - Math.exp(-dt * 14));
-    this.camera.lookAt(viewTarget);
-    this.camera.fov = MathUtils.damp(this.camera.fov, aiming ? 43 : 55, 12, dt);
-    this.camera.updateProjectionMatrix();
+    return desired;
   }
 }

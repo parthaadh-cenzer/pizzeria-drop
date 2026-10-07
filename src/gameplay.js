@@ -14,7 +14,10 @@ export const RULES = {
   jumpSpeed: Math.sqrt(2 * 22 * 8.25),
   speed: 5.6,
   collapse: 3,
-  lockSeconds: 2,
+  // Instant lock: a valid target in the reticle locks on the first update.
+  lockSeconds: 0,
+  // Keeps an existing lock through brief reticle jitter before it drops.
+  lockGrace: 0.25,
   killY: -0.5,
   step: 1 / 120,
   rocketSpeed: 24,
@@ -34,6 +37,7 @@ export class Match {
     count = 2,
     random = Math.random,
     bots = true,
+    names = [],
   } = {}) {
     this.random = random;
     this.bots = bots;
@@ -44,6 +48,11 @@ export class Match {
     this.phase = "preview";
     this.countdown = 3;
     this.events = [];
+    this.winner = null;
+    this.wonAt = null;
+    this.result = null;
+    this.eliminations = [];
+    this.dropTime = null;
     this.projectiles = [];
     this.nextProjectile = 0;
     this.tiles = this.data.tiles.map((t) => ({
@@ -60,7 +69,7 @@ export class Match {
       const s = this.data.spawnPoints[i];
       return {
         id: i,
-        name: i === 0 ? "YOU" : `Pizzaiolo ${i + 1}`,
+        name: names[i] || (i === 0 ? "YOU" : `Pizzaiolo ${i + 1}`),
         position: new Vector3(s.x, s.y, s.z),
         velocity: new Vector3(),
         grounded: false,
@@ -190,17 +199,23 @@ export class Match {
     if (!lock.holding) return;
     const target = this.players[candidate];
     if (!target?.alive || candidate === p.id) {
+      const current = this.players[lock.target];
+      lock.lost = (lock.lost ?? 0) + dt;
+      if (lock.locked && current?.alive && lock.lost <= RULES.lockGrace)
+        return;
       lock.target = null;
       lock.seconds = 0;
       lock.locked = false;
+      lock.lost = 0;
       return;
     }
+    lock.lost = 0;
     if (lock.target !== candidate) {
       lock.target = candidate;
       lock.seconds = 0;
       lock.locked = false;
     }
-    lock.seconds = Math.min(RULES.lockSeconds, lock.seconds + dt);
+    lock.seconds += dt;
     if (lock.seconds >= RULES.lockSeconds && !lock.locked) {
       lock.locked = true;
       this.emit("locked", { player: p.id, target: candidate });
@@ -450,7 +465,60 @@ export class Match {
       p.launcher = null;
       p.ammo = 0;
     }
+    this.eliminations.push(p.id);
     this.emit("eliminated", { player: p.id });
+  }
+  // Last player standing: freeze the match, protect the winner, publish a result.
+  resolve() {
+    if (this.phase !== "active" || this.players.length < 2) return false;
+    const alive = this.players.filter((p) => p.alive);
+    if (alive.length > 1) return false;
+    const winner = alive[0] ?? null;
+    this.phase = "won";
+    this.winner = winner ? winner.id : null;
+    this.wonAt = this.time;
+    this.projectiles.length = 0;
+    for (const p of this.players) this.cancelFire(p.id);
+    if (winner) this.secureWinner(winner);
+    // Placements: winner first, then reverse elimination order.
+    const placements = [
+      ...(winner ? [winner.id] : []),
+      ...[...this.eliminations].reverse(),
+    ];
+    this.result = {
+      winner: this.winner,
+      winnerName: winner?.name ?? null,
+      draw: !winner,
+      placements,
+      names: placements.map((id) => this.players[id].name),
+      duration: this.time - (this.dropTime ?? 0),
+    };
+    this.emit("winner", { ...this.result });
+    return true;
+  }
+  secureWinner(p) {
+    let tile = this.footing(p);
+    if (!tile) {
+      let best = Infinity;
+      for (const t of this.tiles) {
+        if (t.gone) continue;
+        const d = p.position.distanceToSquared(
+          new Vector3(t.x, t.y + RULES.tileTop, t.z),
+        );
+        if (d < best) {
+          best = d;
+          tile = t;
+        }
+      }
+    }
+    if (tile) p.position.set(tile.x, tile.y + RULES.tileTop, tile.z);
+    p.velocity.set(0, 0, 0);
+    p.input = { x: 0, z: 0 };
+    p.grounded = true;
+    p.support = tile ?? null;
+    p.hitUntil = 0;
+    p.diveUntil = -1;
+    p.animation = "dance";
   }
   movePlayer(p, dt) {
     if (!p.alive) {
@@ -596,8 +664,15 @@ export class Match {
       this.countdown -= dt;
       if (this.countdown <= 0) {
         this.phase = "active";
+        this.dropTime = this.time;
         this.emit("drop");
       } else return;
+    }
+    if (this.phase === "won") {
+      // Resolved: hazards, timers, projectiles and movement are frozen.
+      for (const p of this.players)
+        if (!p.alive) p.removed = this.time - p.eliminatedAt >= 0.75;
+      return;
     }
     if (this.phase !== "active") return;
     this.countdown -= dt;
@@ -656,5 +731,6 @@ export class Match {
       if (r.ttl > 0) this.rocketStep(r, dt);
     }
     this.projectiles = this.projectiles.filter((r) => r.ttl > 0);
+    this.resolve();
   }
 }

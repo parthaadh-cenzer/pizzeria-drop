@@ -31,6 +31,9 @@ async function fixture(page, { me, them, gaps = [] }) {
       const { match: m, follow } = window.dropStudio;
       const L = m.data.levels;
       m.bots = false;
+      m.phase = "active";
+      m.winner = null;
+      m.result = null;
       m.countdown = -1;
       m.projectiles.length = 0;
       for (const t of m.tiles) {
@@ -117,11 +120,9 @@ async function steer(page, move) {
     await page.waitForTimeout(40);
   }
   assert.equal(s.lock.target, 1, `target acquired in reticle ${JSON.stringify(s)}`);
-  await page.waitForFunction(
-    () => window.dropStudio.match.players[0].lock.locked,
-    null,
-    { timeout: 4000 },
-  );
+  // Instant lock: the same sample that sees the target in the reticle is already locked.
+  assert(s.lock.locked, "locked immediately on acquisition");
+  assert(s.lock.seconds < 0.25, `lock time ${s.lock.seconds}`);
   return aimState(page);
 }
 // After release, sample the rocket path and wait for its impact.
@@ -178,11 +179,13 @@ try {
   watch(page);
   await page.goto(base);
   await page.waitForFunction(() => window.dropStudio?.match);
+  await page.fill("#player-name", "PARTH");
   await page.click("#play");
   await page.waitForSelector("#controls-panel:not([hidden])");
   const panel = await page.textContent("#controls-panel");
   for (const s of ["W A S D", "Mouse drag", "SPACE", "Hold LMB", "Release LMB", "Dive"])
     assert(panel.includes(s), `panel lists ${s}`);
+  assert(!/2 seconds|2s\b/i.test(panel), "no 2-second lock wording");
   await page.waitForTimeout(500);
   assert.equal(
     await page.evaluate(() => window.dropStudio.match.phase),
@@ -208,7 +211,7 @@ try {
     status: document.querySelector("#weapon-status").textContent,
     held: window.dropStudio.actors[0].weapon.visible,
   }));
-  assert(!hint.hidden && /ROCKET EQUIPPED/.test(hint.text) && /2 seconds/.test(hint.text));
+  assert(!hint.hidden && /ROCKET EQUIPPED/.test(hint.text) && /Aim at a player to lock/i.test(hint.text) && !/second/i.test(hint.text));
   assert(/ROCKETS: 2/.test(hint.status));
   assert(hint.held);
   await page.screenshot({ path: `${shots}/rocket-equipped-hint.png` });
@@ -220,7 +223,7 @@ try {
   assert.equal(C.ammoBefore, 2);
   assert.equal(C.ammoAfter, 1);
   assert(/ROCKETS: 1/.test(await page.textContent("#weapon-status")));
-  pass("C: same-floor real mouse hold → 2s lock → release; target 2x2 destroyed; ROCKETS 2 → 1", C);
+  pass("C: same-floor real mouse hold → instant lock → release; target 2x2 destroyed; ROCKETS 2 → 1", C);
 
   // D: intact floor blocks (shooter on top floor, target below, no gap). Final shot.
   const D = await desktopShot(page, "blocked", { me: [0, 0, 1.3], them: [0, 1, -2.35] });
@@ -285,6 +288,7 @@ try {
   watch(mobile);
   await mobile.goto(base);
   await mobile.waitForFunction(() => window.dropStudio?.match);
+  await mobile.fill("#player-name", "PARTH");
   await mobile.click("#play");
   await mobile.waitForSelector("#controls-panel:not([hidden])");
   assert(await mobile.isVisible(".cp-touch"));
@@ -327,7 +331,7 @@ try {
     await mobile.evaluate(() => window.dropStudio.gameControls.lastPointerType),
     "touch",
   );
-  pass("I: mobile hold FIRE + right-side drag aims up and down; lock + release fires both ways", {
+  pass("I: mobile hold FIRE + right-side drag aims up and down; instant lock + release fires both ways", {
     up: { aimPitch: mUp.aimPitch, hit: mUp.hit },
     down: { aimPitch: mDown.aimPitch, hit: mDown.hit },
   });

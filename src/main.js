@@ -16,6 +16,7 @@ import { createHUD } from "./hud.js";
 import { applyGrip } from "./weapon-rig.js";
 import { createTraffic } from "./traffic.js";
 import { createRocketFX } from "./rocket-fx.js";
+import { createWinnerFX } from "./winner-fx.js";
 import "./game.css";
 import { bake } from "../assets/runtime/props.js";
 
@@ -99,7 +100,23 @@ let player = null,
 const hud = createHUD(),
   follow = new FollowCamera(camera);
 const rocketFX = createRocketFX(scene);
-let paused = false;
+const winnerFX = createWinnerFX(scene);
+let paused = false,
+  celebration = null;
+// Local player's chosen name (persisted). The match and winner screen use it verbatim.
+const NAME_KEY = "pizzeria-drop-name";
+function playerName() {
+  return $("#player-name").value.trim().replace(/\s+/g, " ").slice(0, 14);
+}
+try {
+  $("#player-name").value = localStorage.getItem(NAME_KEY) ?? "";
+} catch {}
+$("#player-name").addEventListener("input", () => {
+  $("#player-name").classList.remove("invalid");
+  try {
+    localStorage.setItem(NAME_KEY, playerName());
+  } catch {}
+});
 const clock = new T.Clock(),
   dummy = new T.Object3D();
 let effects = null;
@@ -158,6 +175,7 @@ function clearWorld() {
   for (const b of batches) b.mesh.dispose();
   for (const a of actors) a.mixer.uncacheRoot(a.model);
   rocketFX.reset();
+  endCelebration();
   worldRoot.clear();
   actors = [];
   batches = [];
@@ -251,7 +269,12 @@ function setupWorld() {
   document.body.classList.remove("playing");
   $("#play").innerHTML = "Take the drop <span>↗</span>";
   clearWorld();
-  match = new Match({ world, difficulty, count: crowd });
+  match = new Match({
+    world,
+    difficulty,
+    count: crowd,
+    names: [playerName() || "YOU"],
+  });
   accumulator = 0;
   controls.enabled = true;
   camera.fov = 42;
@@ -391,6 +414,13 @@ function returnWorld() {
   setupWorld();
 }
 function begin() {
+  if (!playerName()) {
+    // A real name is required so the winner screen never shows a generic label.
+    $("#player-name").classList.add("invalid");
+    $("#player-name").focus();
+    toast("Enter your name to take the drop");
+    return;
+  }
   if (mode === "roster") returnWorld();
   setupWorld();
   playing = true;
@@ -458,8 +488,8 @@ function updateTiles() {
 
 // Reticle acquisition in screen space; touch gets a wider cone and stronger assist.
 const AIM = {
-  mouse: { lock: 56, assist: 72, strength: 1.3 },
-  touch: { lock: 84, assist: 120, strength: 3.4 },
+  mouse: { lock: 56, assist: 72, strength: 1.0 },
+  touch: { lock: 76, assist: 104, strength: 2.2 },
   range: 55,
 };
 const aimProfile = () =>
@@ -552,18 +582,35 @@ function updateMatch(dt) {
       accumulator -= RULES.step;
     }
     const p = match.players[0];
-    if (p.lock.holding) p.rotation = follow.yaw + Math.PI;
-    // Keep the scoped view while the player's own rocket is in flight.
-    const watching = match.projectiles.some((r) => r.owner === 0);
-    follow.update(p, dt, p.lock.holding || watching);
+    if (match.phase === "won" && !celebration) startCelebration();
+    else if (celebration && match.phase !== "won") endCelebration();
+    if (celebration) updateCelebration(dt);
+    else {
+      if (p.lock.holding) p.rotation = follow.yaw + Math.PI;
+      // Keep the scoped view while the player's own rocket is in flight.
+      const watching = match.projectiles.some((r) => r.owner === 0);
+      follow.update(p, dt, p.lock.holding || watching);
+    }
     hud.update(match, camera, viewport, aimInfo());
   }
+  // Brief slow motion at the moment the match resolves.
+  const visualDt = celebration
+    ? dt * T.MathUtils.lerp(0.3, 1, Math.min(1, celebration.t / 0.9))
+    : dt;
   for (const a of actors) {
     const p = a.sim;
     if(p.removed){a.model.visible=false;a.weapon.visible=false;continue;}
     if (playing) {
       a.model.position.copy(p.position);
       a.model.rotation.y = p.rotation;
+      if (celebration && celebration.winner === p.id) {
+        // Victory hops (decaying) and a turn toward the camera.
+        const t = celebration.t,
+          hop = Math.abs(Math.sin(t * 6.5)) * 0.34 * Math.max(0, 1 - t / 3);
+        a.model.position.y += hop;
+        celebration.turn = dampAngle(celebration.turn, celebration.facing, 5, dt);
+        a.model.rotation.y = celebration.turn;
+      }
       action(a, p.animation === "dive" ? "fall" : p.animation);
       if (!p.alive) {
         const t = Math.min(1, (match.time - p.eliminatedAt) / 0.75);
@@ -575,7 +622,7 @@ function updateMatch(dt) {
       else a.model.rotation.x = T.MathUtils.damp(a.model.rotation.x, 0, 12, dt);
     }
     a.weapon.visible = p.launcher !== null;
-    a.mixer.update(dt);
+    a.mixer.update(visualDt);
     applyGrip(a.model, a.weapon);
   }
   for (const h of hammers) {
@@ -588,6 +635,67 @@ function updateMatch(dt) {
     p.root.rotation.y = elapsed * 0.4;
   }
   rocketFX.update(match, dt);
+  winnerFX.update(visualDt);
+}
+function dampAngle(from, to, lambda, dt) {
+  const d = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + d * (1 - Math.exp(-lambda * dt));
+}
+// Winner state: frozen simulation (Match.phase "won"), local-only presentation.
+function startCelebration() {
+  const result = match.result,
+    winner = match.players[result.winner];
+  gameControls.reset();
+  const actor = winner ? actors[winner.id] : null;
+  const facing = winner
+    ? Math.atan2(
+        camera.position.x - winner.position.x,
+        camera.position.z - winner.position.z,
+      )
+    : 0;
+  celebration = {
+    t: 0,
+    winner: winner?.id ?? null,
+    facing,
+    turn: winner?.rotation ?? 0,
+    resultsShown: false,
+  };
+  if (actor) {
+    actor.weapon.visible = false;
+    winnerFX.start(actor.model);
+  }
+  document.body.classList.add("match-won");
+  hud.showVictory(result);
+  onMatchResult(result);
+}
+function updateCelebration(dt) {
+  celebration.t += dt;
+  const winner = match.players[celebration.winner];
+  if (winner) follow.celebrate(winner, dt, celebration.t, celebration.facing);
+  else follow.update(match.players[0], dt, false);
+  if (!celebration.resultsShown && celebration.t >= 3.2) {
+    celebration.resultsShown = true;
+    hud.showResults(match.result);
+  }
+}
+function endCelebration() {
+  celebration = null;
+  winnerFX.reset();
+  document.body.classList.remove("match-won");
+  hud.hideVictory();
+}
+// Network seam: a future server/Staige adapter consumes this result and drives rematches.
+function onMatchResult(result) {
+  window.dropStudio.lastResult = result;
+  dispatchEvent(new CustomEvent("pizzeria:match-result", { detail: result }));
+}
+function requestRematch() {
+  // Local mode: rebuild a fresh Match immediately. Networked mode would wait for the server.
+  begin();
+}
+function returnToLobby() {
+  mode = "world";
+  setupWorld();
 }
 async function init() {
   await Promise.all(
@@ -688,7 +796,7 @@ $("#quality").onclick = () => {
 };
 
 const gameControls = new GameControls(renderer.domElement, {
-  enabled: () => playing && !paused,
+  enabled: () => playing && !paused && match?.phase !== "won",
   canAim: () => !!match && match.players[0].launcher !== null,
   jump: () => match?.jump(0),
   dive: () => match?.dive(0),
@@ -715,10 +823,9 @@ addEventListener("keydown", (e) => {
 });
 $("#controls-open").onclick = openControls;
 $("#controls-open-studio").onclick = openControls;
-$("#exit-match").onclick = () => {
-  mode = "world";
-  setupWorld();
-};
+$("#exit-match").onclick = returnToLobby;
+$("#results-play-again").onclick = requestRematch;
+$("#results-lobby").onclick = returnToLobby;
 function resize() {
   const w = viewport.clientWidth,
     h = viewport.clientHeight;
@@ -773,6 +880,8 @@ window.dropStudio = {
       phase: match?.phase,
       ammo: match?.players[0].ammo,
       lock: match?.players[0].lock,
+      winner: match?.winner,
+      celebrating: !!celebration,
       gridSide: match?.data.side,
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
@@ -793,6 +902,12 @@ window.dropStudio = {
   },
   follow,
   gameControls,
+  winnerFX,
+  get celebration() {
+    return celebration;
+  },
+  requestRematch,
+  returnToLobby,
   scene,
   camera,
   renderer,
